@@ -114,14 +114,12 @@ export default function GanttPage() {
   }
 
   async function seedIfEmpty() {
-    const { data } = await supabase.from('tasks').select('title')
-    const existing = new Set((data || []).map(t => t.title))
-    const toInsert = SEED_MILESTONES
-      .filter(m => !existing.has(m.title))
-      .map(m => ({ ...m, created_by: user.id, assigned_to: user.id, description: '' }))
-    if (!toInsert.length) return
+    const { count } = await supabase.from('tasks').select('*', { count: 'exact', head: true })
+    if (count !== 0) return
     setSeeding(true)
-    await supabase.from('tasks').insert(toInsert)
+    await supabase.from('tasks').insert(
+      SEED_MILESTONES.map(m => ({ ...m, created_by: user.id, assigned_to: user.id, description: '' }))
+    )
     setSeeding(false)
   }
 
