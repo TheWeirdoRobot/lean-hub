@@ -17,16 +17,6 @@ const PHASE_COLOR = {
   Competition: '#EAB308',
 }
 
-const SEED_MILESTONES = [
-  { title: 'Requirements Review',      phase: 'Research',    start_date: '2026-05-01', end_date: '2026-05-10', status: 'not_started', priority: 'high'     },
-  { title: 'Cushion Sensor Prototype', phase: 'Design',      start_date: '2026-05-11', end_date: '2026-05-25', status: 'not_started', priority: 'critical' },
-  { title: 'Motor Controller Design',  phase: 'Design',      start_date: '2026-05-11', end_date: '2026-05-30', status: 'not_started', priority: 'high'     },
-  { title: 'Chassis Fabrication',      phase: 'Fabrication', start_date: '2026-06-01', end_date: '2026-06-20', status: 'not_started', priority: 'high'     },
-  { title: 'Electronics Integration',  phase: 'Fabrication', start_date: '2026-06-15', end_date: '2026-07-05', status: 'not_started', priority: 'critical' },
-  { title: 'Control Algorithm Tuning', phase: 'Testing',     start_date: '2026-07-01', end_date: '2026-07-20', status: 'not_started', priority: 'high'     },
-  { title: 'Full System Test',         phase: 'Testing',     start_date: '2026-07-21', end_date: '2026-08-05', status: 'not_started', priority: 'critical' },
-  { title: 'Competition Prep',         phase: 'Competition', start_date: '2026-08-06', end_date: '2026-08-20', status: 'not_started', priority: 'high'     },
-]
 
 const LW_NAME = 220   // name column in left panel
 const LW_DATE = 100   // each date column in left panel
@@ -57,13 +47,11 @@ export default function GanttPage() {
   const { user } = useAuth()
 
   // ── State / refs (all hooks must be before any early return) ──
-  const [allTasks, setAllTasks]   = useState([])
   const [tasks, setTasks]         = useState([])
   const [profiles, setProfiles]   = useState([])
   const [collapsed, setCollapsed] = useState(new Set())
   const [selectedTask, setSelectedTask] = useState(null)
   const [loading, setLoading]     = useState(true)
-  const [seeding, setSeeding]     = useState(false)
   const [dragState, setDragState] = useState(null)  // { taskId, start, end }
   const [hoverId, setHoverId]     = useState(null)
 
@@ -74,7 +62,7 @@ export default function GanttPage() {
   const activeHandlers = useRef({ move: null, up: null })
   const allTasksRef   = useRef([])
 
-  useEffect(() => { allTasksRef.current = allTasks }, [allTasks])
+  useEffect(() => { allTasksRef.current = tasks }, [tasks])
 
   useEffect(() => {
     if (!user) return
@@ -85,14 +73,7 @@ export default function GanttPage() {
 
   async function loadAll() {
     setLoading(true)
-    await Promise.all([
-      fetchProfiles(),
-      (async () => {
-        await deduplicateIfNeeded()
-        await seedIfEmpty()
-        await fetchTasks()
-      })(),
-    ])
+    await Promise.all([fetchProfiles(), fetchTasks()])
     setLoading(false)
   }
 
@@ -101,36 +82,14 @@ export default function GanttPage() {
     setProfiles(data || [])
   }
 
-  async function deduplicateIfNeeded() {
-    const { data } = await supabase
-      .from('tasks')
-      .select('id, title, created_at')
-      .order('created_at', { ascending: true })
-    if (!data?.length) return
-    const seen = new Set()
-    const del = []
-    data.forEach(t => { if (seen.has(t.title)) del.push(t.id); else seen.add(t.title) })
-    if (del.length) await supabase.from('tasks').delete().in('id', del)
-  }
-
-  async function seedIfEmpty() {
-    const { count } = await supabase.from('tasks').select('*', { count: 'exact', head: true })
-    if (count !== 0) return
-    setSeeding(true)
-    await supabase.from('tasks').insert(
-      SEED_MILESTONES.map(m => ({ ...m, created_by: user.id, assigned_to: user.id, description: '' }))
-    )
-    setSeeding(false)
-  }
-
   async function fetchTasks() {
     const { data } = await supabase
       .from('tasks')
       .select('*, assignee:profiles!tasks_assigned_to_fkey(id, full_name), creator:profiles!tasks_created_by_fkey(id, full_name)')
-      .order('start_date', { ascending: true, nullsLast: true })
-    const all = data || []
-    setAllTasks(all)
-    setTasks(all.filter(t => t.start_date && t.end_date))
+      .not('start_date', 'is', null)
+      .not('end_date', 'is', null)
+      .order('start_date', { ascending: true })
+    setTasks(data || [])
   }
 
   // ── Drag / resize / click ───────────────────────────────────────────────────
@@ -220,7 +179,7 @@ export default function GanttPage() {
 
   // ── Early returns (after all hooks) ─────────────────────────────────────────
 
-  if (loading || seeding) {
+  if (loading) {
     return (
       <div className="fade-in" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         <div className="page-header">
@@ -229,9 +188,8 @@ export default function GanttPage() {
             <p className="page-subtitle">Loading…</p>
           </div>
         </div>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="spinner" style={{ width: 32, height: 32 }} />
-          {seeding && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Seeding LEAN project milestones…</p>}
         </div>
       </div>
     )
