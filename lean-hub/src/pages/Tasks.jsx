@@ -92,9 +92,9 @@ export default function Tasks() {
       console.error('Task delete error:', error)
       throw new Error(error.message)
     }
-    setTasks(prev => prev.filter(t => t.id !== id))
     setShowModal(false)
     setEditingTask(null)
+    await fetchTasks()
   }
 
   async function handleSave(id, updates) {
@@ -233,6 +233,7 @@ export default function Tasks() {
 
 function TaskCard({ task, provided, isDragging, onClick, onDelete }) {
   const [isHovered, setIsHovered] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const isOverdue = task.end_date && task.status !== 'done' && isPast(parseISO(task.end_date))
 
   return (
@@ -259,10 +260,16 @@ function TaskCard({ task, provided, isDragging, onClick, onDelete }) {
       {isHovered && !isDragging && (
         <button
           aria-label={`Delete ${task.title}`}
-          onClick={e => {
+          onClick={async e => {
             e.stopPropagation()
             if (window.confirm(`Delete "${task.title}"? This cannot be undone.`)) {
-              onDelete(task.id)
+              try {
+                setDeleteError('')
+                await onDelete(task.id)
+              } catch (err) {
+                console.error('Delete error:', err)
+                setDeleteError(err.message || 'Failed to delete task.')
+              }
             }
           }}
           style={{
@@ -312,6 +319,9 @@ function TaskCard({ task, provided, isDragging, onClick, onDelete }) {
               </div>
             )}
           </div>
+          {deleteError && (
+            <div style={{ marginTop: 6, fontSize: 11, color: '#EF4444' }}>{deleteError}</div>
+          )}
         </div>
       </div>
     </div>

@@ -37,6 +37,7 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [comments, setComments] = useState([])
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
@@ -255,10 +256,15 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
             </div>
           </div>
 
-          {/* Save error */}
+          {/* Save / delete errors */}
           {saveError && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, marginBottom: 12, color: '#FCA5A5', fontSize: 12 }}>
               <AlertCircle size={13} />{saveError}
+            </div>
+          )}
+          {deleteError && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, marginBottom: 12, color: '#FCA5A5', fontSize: 12 }}>
+              <AlertCircle size={13} />{deleteError}
             </div>
           )}
           {/* Save / Delete row */}
@@ -271,7 +277,15 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
                     <button
                       className="btn btn-sm"
                       style={{ background: 'rgba(239,68,68,0.15)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)', fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer' }}
-                      onClick={async () => { try { await onDelete(task.id) } catch (e) { console.error(e) } }}
+                      onClick={async () => {
+                        try {
+                          setDeleteError('')
+                          await onDelete(task.id)
+                        } catch (e) {
+                          console.error('Delete error:', e)
+                          setDeleteError(e.message || 'Failed to delete task.')
+                        }
+                      }}
                     >
                       Yes, delete
                     </button>
