@@ -3,28 +3,17 @@ import { format, parseISO, differenceInDays, addDays, startOfWeek, getISOWeek } 
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import TaskModal from '../components/TaskModal'
-import { ChevronRight, ChevronDown } from 'lucide-react'
+import { useCustomPhases } from '../hooks/useCustomPhases'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const PHASE_ORDER = ['Research', 'Design', 'Fabrication', 'Testing', 'Competition']
-
-const PHASE_COLOR = {
-  Research:    '#3B82F6',
-  Design:      '#A855F7',
-  Fabrication: '#F97316',
-  Testing:     '#22C55E',
-  Competition: '#EAB308',
-}
-
-
 const LW_NAME = 220   // name column in left panel
 const LW_DATE = 100   // each date column in left panel
-const LW      = LW_NAME + LW_DATE * 2   // total left panel width = 420
-const ROW_H   = 40
-const HDR_H   = 52   // 2-row header (month / week)
-const DAY_W   = 20   // px per calendar day
-const HNDL_W  = 8    // resize handle width
+const LW      = LW_NAME + LW_DATE * 2   // total left panel = 420px
+const ROW_H   = 48
+const HDR_H   = 52
+const DAY_W   = 20
+const HNDL_W  = 8
 const MS_DAY  = 86_400_000
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,26 +30,37 @@ function darken(hex) {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
 }
 
+function subTeamAbbr(st) {
+  if (st === 'Mechanical') return 'MT'
+  if (st === 'Electrical') return 'ET'
+  return 'FT'
+}
+
+function subTeamColor(st) {
+  if (st === 'Mechanical') return '#F97316'
+  if (st === 'Electrical') return '#EAB308'
+  return '#3B82F6'
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function GanttPage() {
   const { user } = useAuth()
+  const { phases, phaseColorMap, loading: phasesLoading } = useCustomPhases()
 
-  // ── State / refs (all hooks must be before any early return) ──
-  const [tasks, setTasks]         = useState([])
-  const [profiles, setProfiles]   = useState([])
-  const [collapsed, setCollapsed] = useState(new Set())
+  const [tasks, setTasks]           = useState([])
+  const [profiles, setProfiles]     = useState([])
   const [selectedTask, setSelectedTask] = useState(null)
-  const [loading, setLoading]     = useState(true)
-  const [dragState, setDragState] = useState(null)  // { taskId, start, end }
-  const [hoverId, setHoverId]     = useState(null)
+  const [tasksLoading, setTasksLoading] = useState(true)
+  const [dragState, setDragState]   = useState(null)
+  const [hoverId, setHoverId]       = useState(null)
 
-  const headerRef     = useRef(null)   // div wrapping the header SVG (synced scroll)
-  const leftRef       = useRef(null)   // left panel body (synced vertical scroll)
-  const timelineRef   = useRef(null)   // the scrollable timeline container
-  const dragging      = useRef(null)
+  const headerRef    = useRef(null)
+  const leftRef      = useRef(null)
+  const timelineRef  = useRef(null)
+  const dragging     = useRef(null)
   const activeHandlers = useRef({ move: null, up: null })
-  const allTasksRef   = useRef([])
+  const allTasksRef  = useRef([])
 
   useEffect(() => { allTasksRef.current = tasks }, [tasks])
 
@@ -69,12 +69,14 @@ export default function GanttPage() {
     loadAll()
   }, [user])
 
+  const loading = tasksLoading || phasesLoading
+
   // ── Data loading ────────────────────────────────────────────────────────────
 
   async function loadAll() {
-    setLoading(true)
+    setTasksLoading(true)
     await Promise.all([fetchProfiles(), fetchTasks()])
-    setLoading(false)
+    setTasksLoading(false)
   }
 
   async function fetchProfiles() {
@@ -88,7 +90,6 @@ export default function GanttPage() {
       .select('*, assignee:profiles!tasks_assigned_to_fkey(id, full_name), creator:profiles!tasks_created_by_fkey(id, full_name)')
       .not('start_date', 'is', null)
       .not('end_date', 'is', null)
-      .order('start_date', { ascending: true })
     setTasks(data || [])
   }
 
@@ -177,7 +178,7 @@ export default function GanttPage() {
     await fetchTasks()
   }
 
-  // ── Early returns (after all hooks) ─────────────────────────────────────────
+  // ── Early returns ─────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -197,18 +198,15 @@ export default function GanttPage() {
 
   // ── Layout computations ──────────────────────────────────────────────────────
 
-  // Visible rows (phase headers + tasks, respecting collapse)
-  const visibleRows = []
-  PHASE_ORDER.forEach(phase => {
-    const phaseTasks = tasks.filter(t => t.phase === phase)
-    if (!phaseTasks.length) return
-    visibleRows.push({ id: `phase::${phase}`, type: 'phase', phase, count: phaseTasks.length, tasks: phaseTasks })
-    if (!collapsed.has(phase)) {
-      phaseTasks.forEach(task => visibleRows.push({ id: task.id, type: 'task', task, phase }))
-    }
-  })
+  // Flat list sorted by start_date asc, then title asc — no phase grouping
+  const visibleRows = [...tasks]
+    .sort((a, b) => {
+      const d = a.start_date.localeCompare(b.start_date)
+      if (d !== 0) return d
+      return a.title.localeCompare(b.title)
+    })
+    .map(task => ({ id: task.id, type: 'task', task }))
 
-  // Timeline date bounds
   const hasTasks = tasks.length > 0
   const rawMin = hasTasks ? new Date(Math.min(...tasks.map(t => parseISO(t.start_date).getTime()))) : new Date()
   const rawMax = hasTasks ? new Date(Math.max(...tasks.map(t => parseISO(t.end_date).getTime())))   : addDays(new Date(), 90)
@@ -217,15 +215,12 @@ export default function GanttPage() {
   const svgW   = (differenceInDays(tlEnd, origin) + 1) * DAY_W
   const svgH   = Math.max(visibleRows.length * ROW_H, 320)
 
-  // Today marker
   const todayX = toX(new Date(), origin)
 
-  // Week columns
   const weeks = []
   let wCursor = origin
   while (wCursor <= tlEnd) { weeks.push(wCursor); wCursor = addDays(wCursor, 7) }
 
-  // Month spans for upper header row
   const monthSpans = []
   let wi = 0
   while (wi < weeks.length) {
@@ -238,16 +233,8 @@ export default function GanttPage() {
   }
 
   function syncScroll(e) {
-    if (headerRef.current)   headerRef.current.scrollLeft = e.target.scrollLeft
-    if (leftRef.current)     leftRef.current.scrollTop    = e.target.scrollTop
-  }
-
-  function toggleCollapse(phase) {
-    setCollapsed(prev => {
-      const next = new Set(prev)
-      next.has(phase) ? next.delete(phase) : next.add(phase)
-      return next
-    })
+    if (headerRef.current)  headerRef.current.scrollLeft = e.target.scrollLeft
+    if (leftRef.current)    leftRef.current.scrollTop    = e.target.scrollTop
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -264,10 +251,10 @@ export default function GanttPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-          {PHASE_ORDER.map(phase => (
-            <div key={phase} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <div style={{ width: 10, height: 10, borderRadius: 2, background: PHASE_COLOR[phase] }} />
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{phase}</span>
+          {phases.map(phase => (
+            <div key={phase.name} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ width: 10, height: 10, borderRadius: 2, background: phase.color }} />
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{phase.name}</span>
             </div>
           ))}
         </div>
@@ -280,14 +267,8 @@ export default function GanttPage() {
         </div>
       ) : (
         <div style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          border: '1px solid #2D2D5E',
-          borderRadius: 14,
-          overflow: 'hidden',
-          background: '#0D0D1A',
+          flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+          border: '1px solid #2D2D5E', borderRadius: 14, overflow: 'hidden', background: '#0D0D1A',
         }}>
 
           {/* ── Fixed header row ─────────────────────────────────────────── */}
@@ -295,23 +276,19 @@ export default function GanttPage() {
 
             {/* Left panel header */}
             <div style={{
-              width: LW, flexShrink: 0,
-              display: 'flex', alignItems: 'flex-end',
-              height: HDR_H,
-              borderRight: '1px solid #2D2D5E',
-              background: '#0D0D1A',
+              width: LW, flexShrink: 0, display: 'flex', alignItems: 'flex-end',
+              height: HDR_H, borderRight: '1px solid #2D2D5E', background: '#0D0D1A',
             }}>
               <div style={{ width: LW_NAME, padding: '0 12px 10px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Task</div>
               <div style={{ width: LW_DATE, paddingBottom: 10, fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>From</div>
               <div style={{ width: LW_DATE, paddingBottom: 10, fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>To</div>
             </div>
 
-            {/* Timeline header — hidden overflow, scrolled via JS */}
+            {/* Timeline header */}
             <div ref={headerRef} style={{ flex: 1, overflow: 'hidden' }}>
               <svg width={svgW} height={HDR_H} style={{ display: 'block' }}>
                 <rect x={0} y={0} width={svgW} height={HDR_H} fill="#0D0D1A" />
 
-                {/* Month labels (upper row) */}
                 {monthSpans.map(ms => (
                   <g key={ms.label + ms.x}>
                     <line x1={ms.x} x2={ms.x} y1={0} y2={HDR_H} stroke="#2D2D5E" strokeWidth={1} />
@@ -323,10 +300,8 @@ export default function GanttPage() {
                   </g>
                 ))}
 
-                {/* Divider between month and week rows */}
                 <line x1={0} x2={svgW} y1={HDR_H / 2} y2={HDR_H / 2} stroke="#2D2D5E" strokeWidth={1} />
 
-                {/* Week labels (lower row) */}
                 {weeks.map(wk => {
                   const x = toX(wk, origin)
                   return (
@@ -345,72 +320,39 @@ export default function GanttPage() {
           {/* ── Body: left panel + timeline ──────────────────────────────── */}
           <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
 
-            {/* Left panel rows (vertical scroll synced via JS) */}
+            {/* Left panel (synced vertical scroll) */}
             <div
               ref={leftRef}
-              style={{
-                width: LW, flexShrink: 0,
-                borderRight: '1px solid #2D2D5E',
-                overflowY: 'hidden',
-                background: '#0D0D1A',
-              }}
+              style={{ width: LW, flexShrink: 0, borderRight: '1px solid #2D2D5E', overflowY: 'hidden', background: '#0D0D1A' }}
             >
-              {visibleRows.map(row => {
-                const isPhase     = row.type === 'phase'
-                const isCollapsed = isPhase && collapsed.has(row.phase)
-                const color       = PHASE_COLOR[row.phase ?? row.task?.phase]
+              {visibleRows.map((row, i) => {
+                const task  = row.task
+                const abbr  = subTeamAbbr(task.sub_team)
+                const stCol = subTeamColor(task.sub_team)
+                const rowBg = i % 2 === 0 ? '#1A1A35' : '#13132A'
 
                 return (
                   <div
                     key={row.id}
-                    style={{
-                      height: ROW_H, flexShrink: 0,
-                      display: 'flex', alignItems: 'center',
-                      borderBottom: '1px solid #2D2D5E',
-                      background: isPhase ? '#1A1A35' : 'transparent',
-                    }}
+                    style={{ height: ROW_H, flexShrink: 0, display: 'flex', alignItems: 'center', borderBottom: '1px solid #2D2D5E', background: rowBg }}
                   >
-                    {isPhase ? (
-                      <button
-                        onClick={() => toggleCollapse(row.phase)}
-                        style={{
-                          width: LW, height: '100%',
-                          display: 'flex', alignItems: 'center', gap: 6,
-                          padding: '0 12px',
-                          background: 'none', border: 'none',
-                          cursor: 'pointer',
-                          color: '#E2E8F0', fontWeight: 600, fontSize: 13,
-                          textAlign: 'left',
-                        }}
-                      >
-                        {isCollapsed
-                          ? <ChevronRight size={14} color="#94A3B8" />
-                          : <ChevronDown  size={14} color="#94A3B8" />
-                        }
-                        <div style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
-                        {row.phase}
-                        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#64748B', fontWeight: 400 }}>
-                          {row.count}
-                        </span>
-                      </button>
-                    ) : (
-                      <>
-                        <div style={{
-                          width: LW_NAME, flexShrink: 0,
-                          padding: '0 8px 0 28px',
-                          fontSize: 12, color: '#E2E8F0',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {row.task.title}
-                        </div>
-                        <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#64748B', textAlign: 'center' }}>
-                          {format(parseISO(row.task.start_date), 'MMM d')}
-                        </div>
-                        <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#64748B', textAlign: 'center' }}>
-                          {format(parseISO(row.task.end_date), 'MMM d')}
-                        </div>
-                      </>
-                    )}
+                    <div style={{ width: LW_NAME, flexShrink: 0, padding: '0 6px 0 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, color: '#E2E8F0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {task.title}
+                      </span>
+                      <span style={{
+                        padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700, flexShrink: 0,
+                        background: stCol + '22', color: stCol, border: `1px solid ${stCol}44`,
+                      }}>
+                        {abbr}
+                      </span>
+                    </div>
+                    <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#64748B', textAlign: 'center' }}>
+                      {format(parseISO(task.start_date), 'MMM d')}
+                    </div>
+                    <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#64748B', textAlign: 'center' }}>
+                      {format(parseISO(task.end_date), 'MMM d')}
+                    </div>
                   </div>
                 )
               })}
@@ -422,17 +364,14 @@ export default function GanttPage() {
               onScroll={syncScroll}
               style={{ flex: 1, overflowX: 'auto', overflowY: 'auto' }}
             >
-              <svg
-                width={svgW}
-                height={svgH}
-                style={{ display: 'block' }}
-              >
+              <svg width={svgW} height={svgH} style={{ display: 'block' }}>
+
                 {/* ── Row backgrounds ── */}
                 {visibleRows.map((row, i) => (
                   <rect
                     key={row.id + '-bg'}
                     x={0} y={i * ROW_H} width={svgW} height={ROW_H}
-                    fill={row.type === 'phase' ? '#1A1A35' : i % 2 === 0 ? '#111127' : '#0D0D1A'}
+                    fill={i % 2 === 0 ? '#1A1A35' : '#13132A'}
                   />
                 ))}
 
@@ -447,50 +386,31 @@ export default function GanttPage() {
                   <line key={i + '-hdiv'} x1={0} x2={svgW} y1={(i + 1) * ROW_H} y2={(i + 1) * ROW_H} stroke="#2D2D5E" strokeWidth={1} />
                 ))}
 
-                {/* ── Today line ── */}
+                {/* ── Today line (orange dashed) ── */}
                 {todayX > 0 && todayX < svgW && (
                   <line
                     x1={todayX} x2={todayX} y1={0} y2={svgH}
-                    stroke="#7C3AED" strokeWidth={1.5} strokeDasharray="5 4"
+                    stroke="#F97316" strokeWidth={1.5} strokeDasharray="5 4"
                   />
                 )}
 
                 {/* ── Task bars ── */}
                 {visibleRows.map((row, i) => {
-                  const y = i * ROW_H
-
-                  if (row.type === 'phase') {
-                    const ps = new Date(Math.min(...row.tasks.map(t => parseISO(t.start_date).getTime())))
-                    const pe = new Date(Math.max(...row.tasks.map(t => parseISO(t.end_date).getTime())))
-                    const bx = toX(ps, origin)
-                    const bw = Math.max(DAY_W, (differenceInDays(pe, ps) + 1) * DAY_W)
-                    return (
-                      <rect
-                        key={row.id + '-pbar'}
-                        x={bx} y={y + ROW_H * 0.35}
-                        width={bw} height={ROW_H * 0.3}
-                        rx={3}
-                        fill={PHASE_COLOR[row.phase] || '#64748B'}
-                        opacity={0.35}
-                        style={{ pointerEvents: 'none' }}
-                      />
-                    )
-                  }
-
-                  // Task bar
                   const task  = row.task
+                  const y     = i * ROW_H
                   const ghost = dragState?.taskId === task.id ? dragState : null
                   const ds    = ghost ? ghost.start : parseISO(task.start_date)
                   const de    = ghost ? ghost.end   : parseISO(task.end_date)
                   const bx    = toX(ds, origin)
                   const bw    = Math.max(DAY_W, (differenceInDays(de, ds) + 1) * DAY_W)
-                  const barY  = y + 5
-                  const barH  = ROW_H - 10
-                  const color = PHASE_COLOR[row.phase] || '#64748B'
+                  const barY  = y + 6
+                  const barH  = ROW_H - 12
+                  const color = phaseColorMap[task.phase] || '#64748B'
                   const isHov = hoverId === task.id
                   const hW    = bw >= HNDL_W * 2 ? HNDL_W : Math.floor(bw / 2)
                   const innerW = Math.max(1, bw - hW * 2)
                   const pct   = { done: 100, review: 75, in_progress: 50, not_started: 0 }[task.status] ?? 0
+                  const abbr  = subTeamAbbr(task.sub_team)
 
                   return (
                     <g
@@ -500,7 +420,7 @@ export default function GanttPage() {
                     >
                       {/* Left resize handle */}
                       <rect
-                        x={bx} y={barY} width={hW} height={barH} rx={3}
+                        x={bx} y={barY} width={hW} height={barH} rx={4}
                         fill={isHov ? darken(color) : color}
                         opacity={ghost ? 0.75 : 1}
                         style={{ cursor: 'ew-resize' }}
@@ -529,14 +449,14 @@ export default function GanttPage() {
 
                       {/* Right resize handle */}
                       <rect
-                        x={bx + bw - hW} y={barY} width={hW} height={barH} rx={3}
+                        x={bx + bw - hW} y={barY} width={hW} height={barH} rx={4}
                         fill={isHov ? darken(color) : color}
                         opacity={ghost ? 0.75 : 1}
                         style={{ cursor: 'ew-resize' }}
                         onMouseDown={e => onBarMouseDown(e, task, 'right')}
                       />
 
-                      {/* Label (clipped to bar) */}
+                      {/* Label with sub-team abbr */}
                       <clipPath id={`clip-${task.id}`}>
                         <rect x={bx} y={barY} width={bw} height={barH} />
                       </clipPath>
@@ -547,7 +467,7 @@ export default function GanttPage() {
                         clipPath={`url(#clip-${task.id})`}
                         style={{ pointerEvents: 'none', userSelect: 'none' }}
                       >
-                        {task.title}
+                        {task.title} · {abbr}
                       </text>
                     </g>
                   )

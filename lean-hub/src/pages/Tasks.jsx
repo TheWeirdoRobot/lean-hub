@@ -7,38 +7,49 @@ import { useAuth } from '../contexts/AuthContext'
 import Avatar from '../components/Avatar'
 import TaskModal from '../components/TaskModal'
 import { format, isPast, parseISO } from 'date-fns'
+import { useCustomPhases } from '../hooks/useCustomPhases'
+import { useCustomStatuses, statusToValue } from '../hooks/useCustomStatuses'
 
-// Explicit select that resolves both FKs from tasks → profiles
 const TASK_SELECT = '*, assignee:profiles!tasks_assigned_to_fkey(id, full_name), creator:profiles!tasks_created_by_fkey(id, full_name)'
 
-const COLUMNS = [
-  { id: 'not_started', label: 'Not Started', color: '#64748B' },
-  { id: 'in_progress', label: 'In Progress', color: '#F59E0B' },
-  { id: 'review',      label: 'Review',      color: '#3B82F6' },
-  { id: 'done',        label: 'Done',        color: '#22C55E' },
-]
+const SUB_TEAM_STYLE = {
+  'Full Team':  { bg: 'rgba(59,130,246,0.15)',  color: '#3B82F6' },
+  'Mechanical': { bg: 'rgba(249,115,22,0.15)',  color: '#F97316' },
+  'Electrical': { bg: 'rgba(234,179,8,0.15)',   color: '#EAB308' },
+}
 
 export default function Tasks() {
   const { user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 
-  const [tasks, setTasks] = useState([])
-  const [profiles, setProfiles] = useState([])
-  const [showModal, setShowModal] = useState(false)
+  const { statuses, loading: statusesLoading } = useCustomStatuses()
+  const { phaseColorMap, loading: phasesLoading } = useCustomPhases()
+
+  const [tasks, setTasks]           = useState([])
+  const [profiles, setProfiles]     = useState([])
+  const [showModal, setShowModal]   = useState(false)
   const [editingTask, setEditingTask] = useState(null)
   const [filterAssignee, setFilterAssignee] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [filterSubTeam, setFilterSubTeam]   = useState('')
+  const [dataLoading, setDataLoading] = useState(true)
 
-  // ID to auto-open once tasks have loaded (passed via router state from Dashboard)
   const [pendingOpenId, setPendingOpenId] = useState(location.state?.openTaskId || null)
 
+  const loading = dataLoading || statusesLoading || phasesLoading
+
+  // Build kanban columns dynamically from custom statuses
+  const COLUMNS = statuses.map(s => ({
+    id:    statusToValue(s.name),
+    label: s.name,
+    color: s.color,
+  }))
+
   useEffect(() => {
-    Promise.all([fetchTasks(), fetchProfiles()]).finally(() => setLoading(false))
+    Promise.all([fetchTasks(), fetchProfiles()]).finally(() => setDataLoading(false))
   }, [])
 
-  // Once tasks are loaded and a pending ID exists, open that task's modal
   useEffect(() => {
     if (!pendingOpenId || loading || tasks.length === 0) return
     const target = tasks.find(t => t.id === pendingOpenId)
@@ -46,7 +57,6 @@ export default function Tasks() {
       setEditingTask(target)
       setShowModal(true)
       setPendingOpenId(null)
-      // Clear router state so a hard-refresh doesn't re-open the modal
       navigate('/tasks', { replace: true, state: {} })
     }
   }, [pendingOpenId, loading, tasks])
@@ -114,6 +124,7 @@ export default function Tasks() {
   const filtered = tasks.filter(t => {
     if (filterAssignee && t.assigned_to !== filterAssignee) return false
     if (filterPriority && t.priority !== filterPriority) return false
+    if (filterSubTeam && (t.sub_team || 'Full Team') !== filterSubTeam) return false
     return true
   })
 
@@ -139,6 +150,12 @@ export default function Tasks() {
             <option value="high">High</option>
             <option value="critical">Critical</option>
           </select>
+          <select className="select" value={filterSubTeam} onChange={e => setFilterSubTeam(e.target.value)} style={{ width: 'auto', minWidth: 120 }}>
+            <option value="">All Sub-teams</option>
+            <option value="Full Team">Full Team</option>
+            <option value="Mechanical">Mechanical</option>
+            <option value="Electrical">Electrical</option>
+          </select>
           <button className="btn btn-primary" onClick={() => { setEditingTask(null); setShowModal(true) }}>
             <Plus size={15} /> New Task
           </button>
@@ -151,7 +168,7 @@ export default function Tasks() {
         </div>
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, flex: 1, minHeight: 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${COLUMNS.length}, 1fr)`, gap: 16, flex: 1, minHeight: 0 }}>
             {COLUMNS.map(col => {
               const colTasks = byStatus(col.id)
               return (
@@ -202,6 +219,7 @@ export default function Tasks() {
                                 isDragging={snap.isDragging}
                                 onClick={() => { setEditingTask(task); setShowModal(true) }}
                                 onDelete={handleDelete}
+                                phaseColorMap={phaseColorMap}
                               />
                             )}
                           </Draggable>
@@ -231,10 +249,14 @@ export default function Tasks() {
   )
 }
 
-function TaskCard({ task, provided, isDragging, onClick, onDelete }) {
+function TaskCard({ task, provided, isDragging, onClick, onDelete, phaseColorMap }) {
   const [isHovered, setIsHovered] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const isOverdue = task.end_date && task.status !== 'done' && isPast(parseISO(task.end_date))
+
+  const phaseColor = phaseColorMap?.[task.phase] || '#64748B'
+  const subTeam = task.sub_team || 'Full Team'
+  const stStyle = SUB_TEAM_STYLE[subTeam] || SUB_TEAM_STYLE['Full Team']
 
   return (
     <div
@@ -267,27 +289,16 @@ function TaskCard({ task, provided, isDragging, onClick, onDelete }) {
                 setDeleteError('')
                 await onDelete(task.id)
               } catch (err) {
-                console.error('Delete error:', err)
                 setDeleteError(err.message || 'Failed to delete task.')
               }
             }
           }}
           style={{
-            position: 'absolute',
-            top: 6,
-            right: 6,
-            width: 20,
-            height: 20,
-            borderRadius: '50%',
-            border: 'none',
-            background: 'rgba(239,68,68,0.15)',
-            color: '#EF4444',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 0,
-            zIndex: 1,
+            position: 'absolute', top: 6, right: 6,
+            width: 20, height: 20, borderRadius: '50%',
+            border: 'none', background: 'rgba(239,68,68,0.15)', color: '#EF4444',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 0, zIndex: 1,
           }}
         >
           <X size={11} />
@@ -298,15 +309,31 @@ function TaskCard({ task, provided, isDragging, onClick, onDelete }) {
           <GripVertical size={13} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7, flexWrap: 'wrap' }}>
-            <span className={`tag tag-${task.phase?.toLowerCase()}`} style={{ fontSize: 10 }}>{task.phase}</span>
+          {/* Phase badge + priority + sub-team badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 7, flexWrap: 'wrap' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 500,
+              background: phaseColor + '26', color: phaseColor,
+            }}>
+              {task.phase}
+            </span>
             <span className={`badge badge-${task.priority}`}>{task.priority}</span>
+          </div>
+          {/* Sub-team badge */}
+          <div style={{ marginBottom: 7 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '2px 7px', borderRadius: 99, fontSize: 10, fontWeight: 600,
+              background: stStyle.bg, color: stStyle.color,
+            }}>
+              {subTeam}
+            </span>
           </div>
           <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, marginBottom: 10, color: 'var(--text-primary)' }}>
             {task.title}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            {/* assignee avatar — uses the aliased `assignee` key */}
             {task.assignee?.full_name ? (
               <Avatar name={task.assignee.full_name} size="sm" />
             ) : (

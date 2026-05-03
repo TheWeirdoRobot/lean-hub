@@ -9,6 +9,7 @@ import Tasks from './pages/Tasks'
 import Gantt from './pages/Gantt'
 import Team from './pages/Team'
 import Files from './pages/Files'
+import Admin from './pages/Admin'
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="gantt" element={<Gantt />} />
             <Route path="team" element={<Team />} />
             <Route path="files" element={<Files />} />
+            <Route path="admin" element={<Admin />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -4,47 +4,48 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Avatar from './Avatar'
 import { format } from 'date-fns'
+import { useCustomPhases } from '../hooks/useCustomPhases'
+import { useCustomStatuses, statusToValue } from '../hooks/useCustomStatuses'
 
 const SAFE_NAME_RE = /[^a-zA-Z0-9._-]/g
 
-const PHASES = ['Research', 'Design', 'Fabrication', 'Testing', 'Competition']
-const STATUSES = [
-  { value: 'not_started', label: 'Not Started' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'review', label: 'Review' },
-  { value: 'done', label: 'Done' },
-]
 const PRIORITIES = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
+  { value: 'low',      label: 'Low' },
+  { value: 'medium',   label: 'Medium' },
+  { value: 'high',     label: 'High' },
   { value: 'critical', label: 'Critical' },
 ]
 
+const SUB_TEAMS = ['Full Team', 'Mechanical', 'Electrical']
+
 export default function TaskModal({ task, profiles, onClose, onSave, onCreate, onDelete }) {
   const { user, profile } = useAuth()
+  const { phases } = useCustomPhases()
+  const { statuses } = useCustomStatuses()
   const isNew = !task?.id
+
   const [form, setForm] = useState({
-    title: task?.title || '',
+    title:       task?.title       || '',
     description: task?.description || '',
     assigned_to: task?.assigned_to || '',
-    status: task?.status || 'not_started',
-    priority: task?.priority || 'medium',
-    phase: task?.phase || 'Research',
-    start_date: task?.start_date || '',
-    end_date: task?.end_date || '',
+    status:      task?.status      || 'not_started',
+    priority:    task?.priority    || 'medium',
+    phase:       task?.phase       || 'Research',
+    sub_team:    task?.sub_team    || 'Full Team',
+    start_date:  task?.start_date  || '',
+    end_date:    task?.end_date    || '',
   })
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [deleteError, setDeleteError] = useState('')
-  const [comments, setComments] = useState([])
-  const [newComment, setNewComment] = useState('')
+  const [saving, setSaving]                     = useState(false)
+  const [saveError, setSaveError]               = useState('')
+  const [confirmDelete, setConfirmDelete]       = useState(false)
+  const [deleteError, setDeleteError]           = useState('')
+  const [comments, setComments]                 = useState([])
+  const [newComment, setNewComment]             = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
-  const [commentError, setCommentError] = useState('')
-  const [files, setFiles] = useState([])
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState('')
+  const [commentError, setCommentError]         = useState('')
+  const [files, setFiles]                       = useState([])
+  const [uploading, setUploading]               = useState(false)
+  const [uploadError, setUploadError]           = useState('')
   const fileRef = useRef(null)
 
   useEffect(() => {
@@ -55,15 +56,20 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
     const sub = supabase
       .channel(`task-comments-${task.id}`)
       .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'comments',
+        event: '*', schema: 'public', table: 'comments',
         filter: `task_id=eq.${task.id}`,
       }, () => fetchComments())
       .subscribe()
 
     return () => supabase.removeChannel(sub)
   }, [task?.id])
+
+  // Keep form.phase in sync if phases load after initial render and form.phase has no match
+  useEffect(() => {
+    if (phases.length > 0 && isNew && !phases.find(p => p.name === form.phase)) {
+      setForm(f => ({ ...f, phase: phases[0].name }))
+    }
+  }, [phases])
 
   async function fetchComments() {
     const { data } = await supabase
@@ -87,12 +93,11 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
     if (!form.title.trim()) return
     setSaving(true)
     setSaveError('')
-    // Coerce empty strings to null so UUID/date columns don't reject them
     const sanitized = {
       ...form,
       assigned_to: form.assigned_to || null,
-      start_date: form.start_date || null,
-      end_date: form.end_date || null,
+      start_date:  form.start_date  || null,
+      end_date:    form.end_date    || null,
     }
     try {
       if (isNew) {
@@ -115,16 +120,14 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
     setSubmittingComment(true)
     setCommentError('')
     const { error } = await supabase.from('comments').insert({
-      task_id: task.id,
+      task_id:   task.id,
       author_id: user.id,
-      content: newComment.trim(),
+      content:   newComment.trim(),
     })
     if (error) {
-      console.error('Comment error:', error)
       setCommentError(error.message)
     } else {
       setNewComment('')
-      // Refresh explicitly in case realtime is not yet active
       await fetchComments()
     }
     setSubmittingComment(false)
@@ -139,21 +142,15 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
       const safeName = file.name.replace(SAFE_NAME_RE, '_')
       const path = `${user.id}/${task.id}/${Date.now()}-${safeName}`
       const { error: uploadErr } = await supabase.storage.from('task-files').upload(path, file)
-      if (uploadErr) {
-        console.error('Storage upload error:', uploadErr)
-        throw new Error(uploadErr.message)
-      }
+      if (uploadErr) throw new Error(uploadErr.message)
       const { error: dbErr } = await supabase.from('files').insert({
-        task_id: task.id,
+        task_id:     task.id,
         uploaded_by: user.id,
-        file_name: file.name,
-        file_path: path,
-        file_size: file.size,
+        file_name:   file.name,
+        file_path:   path,
+        file_size:   file.size,
       })
-      if (dbErr) {
-        console.error('File record error:', dbErr)
-        throw new Error(dbErr.message)
-      }
+      if (dbErr) throw new Error(dbErr.message)
       await fetchFiles()
     } catch (err) {
       setUploadError(err.message || 'Upload failed.')
@@ -178,7 +175,7 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
 
   return (
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal fade-in" style={{ maxWidth: isNew ? 560 : 700 }}>
+      <div className="modal fade-in" style={{ maxWidth: isNew ? 580 : 700 }}>
         <div className="modal-header">
           <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>
             {isNew ? 'New Task' : 'Task Details'}
@@ -214,7 +211,9 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
             <div className="form-group">
               <label htmlFor="task-status">Status</label>
               <select id="task-status" className="select" value={form.status} onChange={set('status')}>
-                {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                {statuses.map(s => (
+                  <option key={s.name} value={statusToValue(s.name)}>{s.name}</option>
+                ))}
               </select>
             </div>
             <div className="form-group">
@@ -225,12 +224,18 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
             </div>
           </div>
 
-          {/* Row: phase + assignee */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {/* Row: phase + sub_team + assignee */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <div className="form-group">
               <label htmlFor="task-phase">Phase</label>
               <select id="task-phase" className="select" value={form.phase} onChange={set('phase')}>
-                {PHASES.map(p => <option key={p} value={p}>{p}</option>)}
+                {phases.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="task-subteam">Sub-team</label>
+              <select id="task-subteam" className="select" value={form.sub_team} onChange={set('sub_team')}>
+                {SUB_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -256,7 +261,7 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
             </div>
           </div>
 
-          {/* Save / delete errors */}
+          {/* Errors */}
           {saveError && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, marginBottom: 12, color: '#FCA5A5', fontSize: 12 }}>
               <AlertCircle size={13} />{saveError}
@@ -267,6 +272,7 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
               <AlertCircle size={13} />{deleteError}
             </div>
           )}
+
           {/* Save / Delete row */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
             <div>
@@ -282,7 +288,6 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
                           setDeleteError('')
                           await onDelete(task.id)
                         } catch (e) {
-                          console.error('Delete error:', e)
                           setDeleteError(e.message || 'Failed to delete task.')
                         }
                       }}
@@ -313,7 +318,7 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
             </div>
           </div>
 
-          {/* Files & Comments only for existing tasks */}
+          {/* Files & Comments — existing tasks only */}
           {!isNew && (
             <>
               <div className="divider" style={{ margin: '24px 0' }} />
@@ -344,27 +349,13 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {files.map(f => (
-                      <div key={f.id} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '8px 10px',
-                        background: 'var(--bg-primary)',
-                        borderRadius: 6,
-                        border: '1px solid var(--border)',
-                      }}>
+                      <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--bg-primary)', borderRadius: 6, border: '1px solid var(--border)' }}>
                         <Paperclip size={13} color="var(--text-muted)" />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {f.file_name}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                            {f.profiles?.full_name} · {formatBytes(f.file_size)}
-                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{f.profiles?.full_name} · {formatBytes(f.file_size)}</div>
                         </div>
-                        <button className="btn btn-ghost btn-sm" aria-label="Download file" onClick={() => handleDownload(f)} style={{ padding: 4 }}>
-                          ↓
-                        </button>
+                        <button className="btn btn-ghost btn-sm" aria-label="Download file" onClick={() => handleDownload(f)} style={{ padding: 4 }}>↓</button>
                         {f.uploaded_by === user.id && (
                           <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteFile(f)} style={{ padding: 4, color: 'var(--danger)' }}>
                             <Trash2 size={13} />
@@ -388,25 +379,16 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
                   {comments.map(c => (
                     <div key={c.id} style={{ display: 'flex', gap: 10 }}>
                       <Avatar name={c.profiles?.full_name} size="sm" />
-                      <div style={{
-                        flex: 1,
-                        background: 'var(--bg-primary)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 8,
-                        padding: '8px 12px',
-                      }}>
+                      <div style={{ flex: 1, background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                           <span style={{ fontSize: 12, fontWeight: 600 }}>{c.profiles?.full_name}</span>
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                            {format(new Date(c.created_at), 'MMM d, h:mm a')}
-                          </span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{format(new Date(c.created_at), 'MMM d, h:mm a')}</span>
                         </div>
                         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>{c.content}</p>
                       </div>
                     </div>
                   ))}
                 </div>
-
                 {commentError && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, marginBottom: 8, color: '#FCA5A5', fontSize: 12 }}>
                     <AlertCircle size={12} />{commentError}

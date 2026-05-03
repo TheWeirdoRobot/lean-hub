@@ -198,3 +198,51 @@ create policy "Uploaders can delete task files"
 -- ─────────────────────────────────────────
 alter publication supabase_realtime add table comments;
 alter publication supabase_realtime add table tasks;
+
+
+-- ─────────────────────────────────────────
+-- FEATURE: SUB-TEAM FIELD ON TASKS
+-- Run: ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sub_team text DEFAULT 'Full Team' CHECK (sub_team IN ('Full Team', 'Mechanical', 'Electrical'));
+-- ─────────────────────────────────────────
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sub_team text DEFAULT 'Full Team' CHECK (sub_team IN ('Full Team', 'Mechanical', 'Electrical'));
+
+-- Drop the inline status check constraint so custom statuses from the Admin panel can be used.
+-- The auto-generated constraint name is tasks_status_check in most Supabase projects.
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
+
+
+-- ─────────────────────────────────────────
+-- CUSTOM PHASES
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS custom_phases (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name text NOT NULL UNIQUE,
+  color text NOT NULL DEFAULT '#7C3AED',
+  created_by uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE custom_phases ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Auth users full access phases"
+  ON custom_phases FOR ALL
+  USING (auth.role() = 'authenticated');
+
+
+-- ─────────────────────────────────────────
+-- CUSTOM STATUSES
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS custom_statuses (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name text NOT NULL UNIQUE,
+  color text NOT NULL DEFAULT '#22C55E',
+  column_order int DEFAULT 0,
+  created_by uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE custom_statuses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Auth users full access statuses"
+  ON custom_statuses FOR ALL
+  USING (auth.role() = 'authenticated');
