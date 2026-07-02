@@ -29,9 +29,10 @@ test.describe('Gantt chart', () => {
     await page.waitForSelector('.overlay', { state: 'hidden', timeout: 10_000 })
 
     // Navigate to Gantt — task should appear as a labeled bar
+    // (title appears in both the left panel and the SVG bar label, so use first())
     await page.goto('/gantt')
     await page.waitForLoadState('networkidle')
-    await expect(page.locator(`text=${title}`)).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator(`text=${title}`).first()).toBeVisible({ timeout: 10_000 })
 
     // Clean up
     await page.goto('/tasks')

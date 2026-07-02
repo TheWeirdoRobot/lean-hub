@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
 const DEFAULT_PHASES = [
-  { name: 'Research',    color: '#3B82F6' },
-  { name: 'Design',      color: '#A855F7' },
-  { name: 'Fabrication', color: '#F97316' },
-  { name: 'Testing',     color: '#22C55E' },
-  { name: 'Competition', color: '#EAB308' },
+  { name: 'Research',    color: '#6CA6E8' },
+  { name: 'Design',      color: '#A79BE8' },
+  { name: 'Fabrication', color: '#DE9260' },
+  { name: 'Testing',     color: '#6BC77A' },
+  { name: 'Competition', color: '#D9A73F' },
 ]
 
 export function useCustomPhases() {

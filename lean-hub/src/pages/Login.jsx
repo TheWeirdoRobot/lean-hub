@@ -10,6 +10,7 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [imgError, setImgError] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -27,73 +28,38 @@ export default function Login() {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#0D0D1A',
-      padding: 16,
-    }}>
-      {/* Background violet glow */}
-      <div style={{
-        position: 'fixed',
-        top: '20%',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: 600,
-        height: 600,
-        background: 'radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
-
-      <div className="fade-in" style={{ width: '100%', maxWidth: 400, position: 'relative' }}>
+    <div className="auth-page">
+      <div className="fade-in" style={{ width: '100%', maxWidth: 400 }}>
         {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <div style={{
-            width: 60,
-            height: 60,
-            background: 'linear-gradient(135deg, #7C3AED, #A855F7)',
-            borderRadius: 18,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 16px',
-            boxShadow: '0 0 36px rgba(124,58,237,0.5)',
-          }}>
-            <WheelchairLogo size={38} color="#fff" />
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div className="auth-logo">
+            {imgError ? (
+              <WheelchairLogo size={34} color="#6E56CF" />
+            ) : (
+              <img
+                src="/logo.png"
+                width={48}
+                height={48}
+                alt="LEAN"
+                style={{ objectFit: 'contain' }}
+                onError={() => setImgError(true)}
+              />
+            )}
           </div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 6px' }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', margin: '0 0 6px' }}>
             LEAN Hub
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
             Powered Wheelchair Basketball · Capstone 2026
           </p>
         </div>
 
         {/* Card */}
-        <div style={{
-          background: '#1A1A35',
-          border: '1px solid #2D2D5E',
-          borderRadius: 16,
-          padding: 32,
-          boxShadow: '0 12px 40px rgba(0,0,0,0.65)',
-        }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>Sign in to your workspace</h2>
+        <div className="auth-card">
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 22 }}>Sign in to your workspace</h2>
 
           {error && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 14px',
-              background: 'rgba(239,68,68,0.1)',
-              border: '1px solid rgba(239,68,68,0.3)',
-              borderRadius: 8,
-              marginBottom: 20,
-              color: '#FCA5A5',
-              fontSize: 13,
-            }}>
+            <div className="alert-error" style={{ alignItems: 'center', marginBottom: 20, color: '#FCA5A5' }}>
               <AlertCircle size={15} aria-hidden="true" />
               {error}
             </div>
@@ -140,7 +106,7 @@ export default function Login() {
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword(p => !p)}
                   tabIndex={-1}
-                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 2, color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', padding: 2, color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
                 >
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
@@ -151,15 +117,15 @@ export default function Login() {
               type="submit"
               className="btn btn-primary"
               disabled={loading}
-              style={{ width: '100%', justifyContent: 'center', marginTop: 8, padding: '11px 0', fontSize: 14 }}
+              style={{ width: '100%', marginTop: 8, padding: '10px 0', fontSize: 14 }}
             >
-              {loading ? <span className="spinner" style={{ width: 16, height: 16 }} /> : 'Sign in'}
+              {loading ? <span className="spinner" style={{ width: 16, height: 16, borderTopColor: '#fff' }} /> : 'Sign in'}
             </button>
           </form>
 
           <p style={{ textAlign: 'center', marginTop: 20, color: 'var(--text-muted)', fontSize: 13 }}>
             No account?{' '}
-            <Link to="/signup" style={{ color: '#A855F7', fontWeight: 500 }}>
+            <Link to="/signup" style={{ color: 'var(--accent-light)', fontWeight: 500 }}>
               Create one
             </Link>
           </p>

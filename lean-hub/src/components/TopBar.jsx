@@ -1,19 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { LogOut, ChevronDown, User } from 'lucide-react'
+import { LogOut, ChevronDown } from 'lucide-react'
+import { format } from 'date-fns'
 import { useAuth } from '../contexts/AuthContext'
-
-function getAvatarColor(name) {
-  const colors = [
-    ['#A855F7', '#2D1B69'],
-    ['#7C3AED', '#1E0A4A'],
-    ['#3B82F6', '#1E3A5F'],
-    ['#22C55E', '#14532D'],
-    ['#EC4899', '#5B1647'],
-    ['#EAB308', '#4A3000'],
-  ]
-  const idx = (name?.charCodeAt(0) || 0) % colors.length
-  return colors[idx]
-}
+import Avatar from './Avatar'
 
 export default function TopBar({ title }) {
   const { profile, signOut } = useAuth()
@@ -35,79 +24,42 @@ export default function TopBar({ title }) {
     }
   }, [])
 
-  const initials = profile?.full_name
-    ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2)
-    : '?'
-
-  const [fg, bg] = getAvatarColor(profile?.full_name)
-
   return (
-    <header style={{
-      height: 60,
-      borderBottom: '1px solid var(--border)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '0 24px',
-      background: 'var(--bg-secondary)',
-      flexShrink: 0,
-    }}>
-      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
-        {title}
-      </div>
+    <header className="topbar">
+      <div className="topbar-title">{title}</div>
 
-      <div ref={ref} style={{ position: 'relative' }}>
-        <button
-          onClick={() => setOpen(!open)}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            background: 'var(--bg-tertiary)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            padding: '6px 10px',
-            color: 'var(--text-primary)',
-            cursor: 'pointer',
-            transition: 'all 0.15s',
-          }}
-        >
-          <div className="avatar avatar-sm" style={{ background: bg, color: fg }}>
-            {initials}
-          </div>
-          <span style={{ fontSize: 13, fontWeight: 500 }}>{profile?.full_name || 'User'}</span>
-          <ChevronDown size={14} color="var(--text-muted)" />
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <span className="topbar-date">{format(new Date(), 'EEE, MMM d')}</span>
 
-        {open && (
-          <div className="fade-in" style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            padding: '6px',
-            minWidth: 180,
-            boxShadow: 'var(--shadow-md)',
-            zIndex: 50,
-          }}>
-            <div style={{ padding: '8px 10px 10px', borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{profile?.full_name}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{profile?.role}</div>
+        <div ref={ref} style={{ position: 'relative' }}>
+          <button
+            className="user-chip"
+            onClick={() => setOpen(!open)}
+            aria-haspopup="menu"
+            aria-expanded={open}
+          >
+            <Avatar name={profile?.full_name} size="sm" />
+            <span style={{ fontSize: 13, fontWeight: 500 }}>{profile?.full_name || 'User'}</span>
+            <ChevronDown size={13} color="var(--text-muted)" />
+          </button>
+
+          {open && (
+            <div className="user-menu fade-in">
+              <div style={{ padding: '8px 12px 10px', borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{profile?.full_name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{profile?.role}</div>
+              </div>
+              <button
+                onClick={signOut}
+                className="btn btn-ghost"
+                style={{ width: '100%', justifyContent: 'flex-start', color: 'var(--danger)', gap: 8 }}
+              >
+                <LogOut size={14} />
+                Sign out
+              </button>
             </div>
-            <button
-              onClick={signOut}
-              className="btn btn-ghost"
-              style={{ width: '100%', justifyContent: 'flex-start', color: 'var(--danger)', gap: 8 }}
-            >
-              <LogOut size={14} />
-              Sign out
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </header>
   )

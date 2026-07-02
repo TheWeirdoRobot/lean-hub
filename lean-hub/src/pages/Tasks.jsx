@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { Plus, Calendar, GripVertical, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
 import Avatar from '../components/Avatar'
 import TaskModal from '../components/TaskModal'
 import { format, isPast, parseISO } from 'date-fns'
@@ -13,13 +12,12 @@ import { useCustomStatuses, statusToValue } from '../hooks/useCustomStatuses'
 const TASK_SELECT = '*, assignee:profiles!tasks_assigned_to_fkey(id, full_name), creator:profiles!tasks_created_by_fkey(id, full_name)'
 
 const SUB_TEAM_STYLE = {
-  'Full Team':  { bg: 'rgba(59,130,246,0.15)',  color: '#3B82F6' },
-  'Mechanical': { bg: 'rgba(249,115,22,0.15)',  color: '#F97316' },
-  'Electrical': { bg: 'rgba(234,179,8,0.15)',   color: '#EAB308' },
+  'Full Team':  { color: '#6CA6E8', abbr: 'FT' },
+  'Mechanical': { color: '#DE9260', abbr: 'MT' },
+  'Electrical': { color: '#D9A73F', abbr: 'ET' },
 }
 
 export default function Tasks() {
-  const { user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -168,26 +166,15 @@ export default function Tasks() {
         </div>
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${COLUMNS.length}, 1fr)`, gap: 16, flex: 1, minHeight: 0 }}>
+          <div className="kanban-board" style={{ gridTemplateColumns: `repeat(${COLUMNS.length}, minmax(240px, 1fr))` }}>
             {COLUMNS.map(col => {
               const colTasks = byStatus(col.id)
               return (
                 <div key={col.id} style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '10px 14px',
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '10px 10px 0 0',
-                    borderBottom: 'none',
-                  }}>
+                  <div className="kanban-col-head">
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: col.color }} />
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{col.label}</span>
-                    <span style={{
-                      marginLeft: 'auto', fontSize: 11, fontWeight: 600,
-                      background: 'var(--bg-primary)', color: 'var(--text-muted)',
-                      padding: '1px 7px', borderRadius: 99,
-                    }}>{colTasks.length}</span>
+                    <span className="kanban-count">{colTasks.length}</span>
                   </div>
 
                   <Droppable droppableId={col.id}>
@@ -195,15 +182,7 @@ export default function Tasks() {
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        style={{
-                          flex: 1, overflowY: 'auto', padding: '8px',
-                          background: snapshot.isDraggingOver ? 'rgba(124,58,237,0.06)' : 'var(--bg-secondary)',
-                          border: `1px solid ${snapshot.isDraggingOver ? 'rgba(124,58,237,0.35)' : 'var(--border)'}`,
-                          borderTop: 'none',
-                          borderRadius: '0 0 10px 10px',
-                          transition: 'all 0.15s',
-                          minHeight: 120,
-                        }}
+                        className={`kanban-col-body${snapshot.isDraggingOver ? ' drag-over' : ''}`}
                       >
                         {colTasks.length === 0 && (
                           <div style={{ padding: '20px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
@@ -250,11 +229,10 @@ export default function Tasks() {
 }
 
 function TaskCard({ task, provided, isDragging, onClick, onDelete, phaseColorMap }) {
-  const [isHovered, setIsHovered] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const isOverdue = task.end_date && task.status !== 'done' && isPast(parseISO(task.end_date))
 
-  const phaseColor = phaseColorMap?.[task.phase] || '#64748B'
+  const phaseColor = phaseColorMap?.[task.phase] || '#70707C'
   const subTeam = task.sub_team || 'Full Team'
   const stStyle = SUB_TEAM_STYLE[subTeam] || SUB_TEAM_STYLE['Full Team']
 
@@ -262,92 +240,73 @@ function TaskCard({ task, provided, isDragging, onClick, onDelete, phaseColorMap
     <div
       ref={provided.innerRef}
       {...provided.draggableProps}
-      onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      {...provided.dragHandleProps}
+      onClick={e => { if (!e.defaultPrevented) onClick() }}
+      className="task-card"
       style={{
-        position: 'relative',
-        background: isDragging ? 'var(--bg-hover)' : 'var(--bg-primary)',
-        border: `1px solid ${isDragging ? 'rgba(124,58,237,0.55)' : isHovered ? 'rgba(124,58,237,0.4)' : 'var(--border)'}`,
-        borderRadius: 8,
-        padding: '12px',
-        marginBottom: 8,
-        cursor: 'pointer',
-        transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
-        boxShadow: isDragging ? '0 8px 28px rgba(0,0,0,0.5)' : isHovered ? '0 2px 8px rgba(124,58,237,0.15)' : 'none',
-        transform: isDragging ? 'rotate(1.5deg)' : 'none',
+        ...(isDragging && {
+          background: 'var(--bg-hover)',
+          borderColor: 'var(--accent)',
+          boxShadow: 'var(--shadow-md)',
+        }),
         ...provided.draggableProps.style,
       }}
     >
-      {isHovered && !isDragging && (
-        <button
-          aria-label={`Delete ${task.title}`}
-          onClick={async e => {
-            e.stopPropagation()
-            if (window.confirm(`Delete "${task.title}"? This cannot be undone.`)) {
-              try {
-                setDeleteError('')
-                await onDelete(task.id)
-              } catch (err) {
-                setDeleteError(err.message || 'Failed to delete task.')
-              }
+      <button
+        className="task-delete"
+        aria-label={`Delete ${task.title}`}
+        onClick={async e => {
+          e.stopPropagation()
+          if (window.confirm(`Delete "${task.title}"? This cannot be undone.`)) {
+            try {
+              setDeleteError('')
+              await onDelete(task.id)
+            } catch (err) {
+              setDeleteError(err.message || 'Failed to delete task.')
             }
-          }}
-          style={{
-            position: 'absolute', top: 6, right: 6,
-            width: 20, height: 20, borderRadius: '50%',
-            border: 'none', background: 'rgba(239,68,68,0.15)', color: '#EF4444',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 0, zIndex: 1,
-          }}
-        >
-          <X size={11} />
-        </button>
-      )}
+          }
+        }}
+      >
+        <X size={11} />
+      </button>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <div {...provided.dragHandleProps} style={{ marginTop: 2, color: 'var(--text-muted)', opacity: 0.5 }}>
+        <div style={{ marginTop: 2, color: 'var(--text-muted)', opacity: 0.5 }}>
           <GripVertical size={13} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Phase badge + priority + sub-team badge */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 7, flexWrap: 'wrap' }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 500,
-              background: phaseColor + '26', color: phaseColor,
-            }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8, flexWrap: 'wrap' }}>
+            <span className="tag" style={{ fontSize: 10, background: phaseColor + '1F', color: phaseColor }}>
               {task.phase}
             </span>
             <span className={`badge badge-${task.priority}`}>{task.priority}</span>
           </div>
-          {/* Sub-team badge */}
-          <div style={{ marginBottom: 7 }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              padding: '2px 7px', borderRadius: 99, fontSize: 10, fontWeight: 600,
-              background: stStyle.bg, color: stStyle.color,
-            }}>
-              {subTeam}
-            </span>
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, marginBottom: 10, color: 'var(--text-primary)' }}>
+          <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.4, marginBottom: 10, color: 'var(--text-primary)' }}>
             {task.title}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {task.assignee?.full_name ? (
               <Avatar name={task.assignee.full_name} size="sm" />
             ) : (
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-secondary)', border: '1px dashed var(--border)' }} />
+              <div style={{ width: 28, height: 28, borderRadius: '50%', border: '1px dashed var(--border-strong)', flexShrink: 0 }} />
             )}
+            <span
+              title={subTeam}
+              style={{
+                padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                color: stStyle.color, border: `1px solid ${stStyle.color}44`,
+              }}
+            >
+              {stStyle.abbr}
+            </span>
             {task.end_date && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, marginLeft: 'auto', color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
                 <Calendar size={11} />
                 {format(parseISO(task.end_date), 'MMM d')}
-              </div>
+              </span>
             )}
           </div>
           {deleteError && (
-            <div style={{ marginTop: 6, fontSize: 11, color: '#EF4444' }}>{deleteError}</div>
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--danger)' }}>{deleteError}</div>
           )}
         </div>
       </div>

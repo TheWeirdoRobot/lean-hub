@@ -11,7 +11,7 @@ test.describe('Dashboard', () => {
 
   test('stat counters are visible and numeric', async ({ page }) => {
     // The four stat cards show Total Tasks, In Progress, Completed, Overdue
-    const statValues = page.locator('.card').filter({ has: page.locator('[style*="fontWeight: 800"]') })
+    const statValues = page.locator('.card').filter({ has: page.locator('.stat-value') })
     // At minimum, each counter should contain a digit
     await expect(statValues.first()).toBeVisible()
     const text = await page.locator('text=Total Tasks').first().locator('..').locator('..').textContent()

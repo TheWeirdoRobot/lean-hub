@@ -28,9 +28,8 @@ const ROW = {
 }
 
 const LABEL_STYLE = {
-  display: 'block', fontSize: 11, fontWeight: 600,
-  color: 'var(--text-muted)', marginBottom: 5,
-  textTransform: 'uppercase', letterSpacing: '0.04em',
+  display: 'block', fontSize: 12, fontWeight: 500,
+  color: 'var(--text-secondary)', marginBottom: 5,
 }
 
 export default function Admin() {
@@ -39,7 +38,7 @@ export default function Admin() {
   const { statuses, reload: reloadStatuses } = useCustomStatuses()
 
   const [showPhaseForm, setShowPhaseForm]       = useState(false)
-  const [phaseForm, setPhaseForm]               = useState({ name: '', color: '#7C3AED' })
+  const [phaseForm, setPhaseForm]               = useState({ name: '', color: '#6E56CF' })
   const [phaseError, setPhaseError]             = useState('')
   const [phaseSaving, setPhaseSaving]           = useState(false)
   const [phaseDeleteWarn, setPhaseDeleteWarn]   = useState(null)
@@ -64,7 +63,7 @@ export default function Admin() {
     if (error) {
       setPhaseError(error.message)
     } else {
-      setPhaseForm({ name: '', color: '#7C3AED' })
+      setPhaseForm({ name: '', color: '#6E56CF' })
       setShowPhaseForm(false)
       reloadPhases()
     }

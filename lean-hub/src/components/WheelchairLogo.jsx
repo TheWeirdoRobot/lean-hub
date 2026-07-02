@@ -1,4 +1,4 @@
-export default function WheelchairLogo({ size = 32, color = '#A855F7' }) {
+export default function WheelchairLogo({ size = 32, color = '#6E56CF' }) {
   return (
     <svg
       width={size}

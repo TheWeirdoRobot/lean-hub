@@ -18,9 +18,9 @@ const SAFE_NAME_RE = /[^a-zA-Z0-9._-]/g
 
 function FileIcon({ name }) {
   const ext = name?.split('.').pop()?.toLowerCase()
-  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext)) return <Image size={16} color="#A855F7" />
-  if (['pdf', 'doc', 'docx', 'txt', 'md'].includes(ext)) return <FileText size={16} color="#3B82F6" />
-  return <File size={16} color="#64748B" />
+  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext)) return <Image size={16} color="#A79BE8" />
+  if (['pdf', 'doc', 'docx', 'txt', 'md'].includes(ext)) return <FileText size={16} color="#6CA6E8" />
+  return <File size={16} color="#70707C" />
 }
 
 function formatBytes(bytes) {
@@ -165,24 +165,13 @@ export default function Files() {
 
       {/* Upload error banner */}
       {uploadError && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 10,
-          padding: '12px 16px',
-          background: 'rgba(239,68,68,0.1)',
-          border: '1px solid rgba(239,68,68,0.3)',
-          borderRadius: 8,
-          marginBottom: 18,
-          color: '#FCA5A5',
-          fontSize: 13,
-        }}>
+        <div className="alert-error" style={{ marginBottom: 18 }}>
           <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
           <span style={{ flex: 1 }}>{uploadError}</span>
           <button
             aria-label="Dismiss error"
             onClick={() => setUploadError('')}
-            style={{ background: 'none', border: 'none', color: '#FCA5A5', cursor: 'pointer', padding: 0, display: 'flex' }}
+            style={{ color: '#FCA5A5', padding: 0, display: 'flex' }}
           >
             <X size={14} aria-hidden="true" />
           </button>
@@ -217,42 +206,25 @@ export default function Files() {
           </p>
         </div>
       ) : (
-        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+        <div className="table-wrap">
           {/* Table header */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '2fr 1fr 1fr 80px 100px 60px',
-            padding: '12px 20px',
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--bg-primary)',
-          }}>
+          <div className="table-head" style={{ gridTemplateColumns: '2fr 1fr 1fr 80px 100px 60px' }}>
             {['File Name', 'Uploaded By', 'Task', 'Size', 'Date', ''].map((h, i) => (
-              <div key={i} style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {h}
-              </div>
+              <div key={i}>{h}</div>
             ))}
           </div>
 
-          {filtered.map((file, i) => (
+          {filtered.map(file => (
             <div
               key={file.id}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '2fr 1fr 1fr 80px 100px 60px',
-                padding: '14px 20px',
-                borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
-                alignItems: 'center',
-                transition: 'background 0.15s',
-                gap: 8,
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-primary)'}
-              onMouseLeave={e => e.currentTarget.style.background = ''}
+              className="table-row"
+              style={{ gridTemplateColumns: '2fr 1fr 1fr 80px 100px 60px' }}
             >
               {/* File name */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 <div style={{
                   width: 32, height: 32,
-                  background: 'var(--bg-primary)',
+                  background: 'var(--bg-tertiary)',
                   border: '1px solid var(--border)',
                   borderRadius: 8,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',

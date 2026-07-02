@@ -46,8 +46,9 @@ test.describe('Task management', () => {
     await page.waitForSelector(`text=${title}`)
 
     // Locate the card and the "In Progress" column drop zone
-    const card = page.locator('div', { hasText: title }).filter({ has: page.locator('text=Research') }).first()
-    const targetColumn = page.locator('[data-rbd-droppable-id="in_progress"]')
+    // (@hello-pangea/dnd uses the data-rfd-* attribute prefix)
+    const card = page.locator('.task-card', { hasText: title }).first()
+    const targetColumn = page.locator('[data-rfd-droppable-id="in_progress"]')
 
     const cardBox = await card.boundingBox()
     const targetBox = await targetColumn.boundingBox()

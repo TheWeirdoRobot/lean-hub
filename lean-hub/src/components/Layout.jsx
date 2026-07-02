@@ -8,6 +8,7 @@ const pageTitles = {
   '/gantt': 'Gantt Chart',
   '/team': 'Team',
   '/files': 'Files',
+  '/admin': 'Admin',
 }
 
 export default function Layout() {
@@ -17,14 +18,9 @@ export default function Layout() {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopBar title={title} />
-        <main style={{
-          flex: 1,
-          overflow: 'auto',
-          padding: '28px 28px',
-          background: 'var(--bg-primary)',
-        }}>
+        <main style={{ flex: 1, overflow: 'auto', padding: '24px 28px', background: 'var(--bg-primary)' }}>
           <Outlet />
         </main>
       </div>

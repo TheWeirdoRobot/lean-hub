@@ -4,16 +4,16 @@ import { supabase } from '../lib/supabase'
 import Avatar from '../components/Avatar'
 
 const ROLE_COLORS = {
-  'Team Lead': { bg: 'rgba(249,115,22,0.12)',  color: '#F97316', border: 'rgba(249,115,22,0.3)' },
-  'ME':        { bg: 'rgba(168,85,247,0.12)',  color: '#A855F7', border: 'rgba(168,85,247,0.3)' },
-  'CS':        { bg: 'rgba(59,130,246,0.12)',  color: '#3B82F6', border: 'rgba(59,130,246,0.3)' },
-  'Member':    { bg: 'rgba(100,116,139,0.12)', color: '#94A3B8', border: 'rgba(100,116,139,0.3)' },
+  'Team Lead': { bg: 'rgba(222,146,96,0.12)',  color: '#DE9260', border: 'rgba(222,146,96,0.3)' },
+  'ME':        { bg: 'rgba(167,155,232,0.12)', color: '#A79BE8', border: 'rgba(167,155,232,0.3)' },
+  'CS':        { bg: 'rgba(108,166,232,0.12)', color: '#6CA6E8', border: 'rgba(108,166,232,0.3)' },
+  'Member':    { bg: 'rgba(157,162,174,0.1)',  color: '#9DA2AE', border: 'rgba(157,162,174,0.3)' },
 }
 
 const SUB_TEAMS = [
-  { name: 'Full Team',  color: '#3B82F6', abbr: 'FT', bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.3)' },
-  { name: 'Mechanical', color: '#F97316', abbr: 'MT', bg: 'rgba(249,115,22,0.12)',  border: 'rgba(249,115,22,0.3)' },
-  { name: 'Electrical', color: '#EAB308', abbr: 'ET', bg: 'rgba(234,179,8,0.12)',   border: 'rgba(234,179,8,0.3)' },
+  { name: 'Full Team',  color: '#6CA6E8', abbr: 'FT', bg: 'rgba(108,166,232,0.1)', border: 'rgba(108,166,232,0.3)' },
+  { name: 'Mechanical', color: '#DE9260', abbr: 'MT', bg: 'rgba(222,146,96,0.1)',  border: 'rgba(222,146,96,0.3)' },
+  { name: 'Electrical', color: '#D9A73F', abbr: 'ET', bg: 'rgba(217,167,63,0.1)',  border: 'rgba(217,167,63,0.3)' },
 ]
 
 function getRoleStyle(role) {
@@ -103,13 +103,8 @@ export default function Team() {
                 <div
                   key={p.id}
                   className="card"
-                  style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: 0, overflow: 'hidden', transition: 'transform 0.15s, box-shadow 0.15s', cursor: 'default' }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)' }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: 0, overflow: 'hidden' }}
                 >
-                  {/* Top color bar */}
-                  <div style={{ height: 4, background: `linear-gradient(90deg, ${roleStyle.color}, ${roleStyle.color}88)` }} />
-
                   <div style={{ padding: '22px 22px 20px' }}>
                     {/* Avatar + name + role */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
@@ -142,9 +137,9 @@ export default function Team() {
 
                     {/* Task stats */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                      <StatBox icon={<CheckSquare size={13} color="#94A3B8" />} value={stats.total} label="Assigned" />
-                      <StatBox icon={<Clock size={13} color="#F59E0B" />} value={stats.inProgress} label="Active" />
-                      <StatBox icon={<CheckSquare size={13} color="#22C55E" />} value={stats.done} label="Done" />
+                      <StatBox icon={<CheckSquare size={13} color="#9DA2AE" />} value={stats.total} label="Assigned" />
+                      <StatBox icon={<Clock size={13} color="#D9A73F" />} value={stats.inProgress} label="Active" />
+                      <StatBox icon={<CheckSquare size={13} color="#6BC77A" />} value={stats.done} label="Done" />
                     </div>
 
                     {/* Completion bar */}

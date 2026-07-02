@@ -42,9 +42,9 @@ function subTeamAbbr(st) {
 }
 
 function subTeamColor(st) {
-  if (st === 'Mechanical') return '#F97316'
-  if (st === 'Electrical') return '#EAB308'
-  return '#3B82F6'
+  if (st === 'Mechanical') return '#DE9260'
+  if (st === 'Electrical') return '#D9A73F'
+  return '#6CA6E8'
 }
 
 function isWeekend(date) {
@@ -207,7 +207,7 @@ export default function GanttPage() {
       canvas.width  = w
       canvas.height = h
       const ctx = canvas.getContext('2d')
-      ctx.fillStyle = '#0D0D1A'
+      ctx.fillStyle = '#101014'
       ctx.fillRect(0, 0, w, h)
       ctx.drawImage(img, 0, 0)
       URL.revokeObjectURL(url)
@@ -291,10 +291,10 @@ export default function GanttPage() {
     <div className="fade-in" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         .gantt-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-        .gantt-scroll::-webkit-scrollbar-track { background: #080812; }
-        .gantt-scroll::-webkit-scrollbar-thumb { background: #2D2D5E; border-radius: 4px; }
-        .gantt-scroll::-webkit-scrollbar-thumb:hover { background: #3D3D7E; }
-        .gantt-scroll::-webkit-scrollbar-corner { background: #080812; }
+        .gantt-scroll::-webkit-scrollbar-track { background: #0C0C0F; }
+        .gantt-scroll::-webkit-scrollbar-thumb { background: #26262E; border-radius: 4px; }
+        .gantt-scroll::-webkit-scrollbar-thumb:hover { background: #3E3E4A; }
+        .gantt-scroll::-webkit-scrollbar-corner { background: #0C0C0F; }
       `}</style>
 
       {/* Page header */}
@@ -330,39 +330,39 @@ export default function GanttPage() {
       ) : (
         <div style={{
           flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
-          border: '1px solid #2D2D5E', borderRadius: 14, overflow: 'hidden', background: '#0D0D1A',
+          border: '1px solid #26262E', borderRadius: 14, overflow: 'hidden', background: '#101014',
         }}>
 
           {/* ── Fixed 3-row header ─────────────────────────────────────────── */}
-          <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid #2D2D5E', background: '#0D0D1A', zIndex: 4 }}>
+          <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid #26262E', background: '#101014', zIndex: 4 }}>
 
             {/* Left panel header */}
             <div style={{
               width: LW, flexShrink: 0, display: 'flex', alignItems: 'flex-end',
-              height: HDR_H, borderRight: '1px solid #2D2D5E', background: '#0D0D1A',
+              height: HDR_H, borderRight: '1px solid #26262E', background: '#101014',
             }}>
-              <div style={{ width: LW_NAME, padding: '0 12px 10px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Task</div>
-              <div style={{ width: LW_DATE, paddingBottom: 10, fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>From</div>
-              <div style={{ width: LW_DATE, paddingBottom: 10, fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>To</div>
+              <div style={{ width: LW_NAME, padding: '0 12px 10px', fontSize: 11, fontWeight: 600, color: '#70707C', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Task</div>
+              <div style={{ width: LW_DATE, paddingBottom: 10, fontSize: 11, fontWeight: 600, color: '#70707C', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>From</div>
+              <div style={{ width: LW_DATE, paddingBottom: 10, fontSize: 11, fontWeight: 600, color: '#70707C', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>To</div>
             </div>
 
             {/* Timeline header (hidden overflow, synced with body scroll) */}
             <div ref={headerRef} style={{ flex: 1, overflow: 'hidden' }}>
               <svg width={svgW} height={HDR_H} style={{ display: 'block' }}>
-                <rect x={0} y={0} width={svgW} height={HDR_H} fill="#0D0D1A" />
+                <rect x={0} y={0} width={svgW} height={HDR_H} fill="#101014" />
 
                 {/* Row 1 — Month labels */}
                 {monthSpans.map(ms => (
                   <g key={ms.label + ms.x}>
-                    <line x1={ms.x} x2={ms.x} y1={0} y2={ROW1} stroke="#2D2D5E" strokeWidth={1} />
+                    <line x1={ms.x} x2={ms.x} y1={0} y2={ROW1} stroke="#26262E" strokeWidth={1} />
                     {ms.w >= 36 && (
-                      <text x={ms.x + 8} y={ROW1 - 7} fill="#F1F5F9" fontSize={11} fontWeight={600} fontFamily="Inter, sans-serif">
+                      <text x={ms.x + 8} y={ROW1 - 7} fill="#EDEDF2" fontSize={11} fontWeight={600} fontFamily="Inter, sans-serif">
                         {ms.label}
                       </text>
                     )}
                   </g>
                 ))}
-                <line x1={0} x2={svgW} y1={ROW1} y2={ROW1} stroke="#2D2D5E" strokeWidth={1} />
+                <line x1={0} x2={svgW} y1={ROW1} y2={ROW1} stroke="#26262E" strokeWidth={1} />
 
                 {/* Row 2 — Day numbers */}
                 {days.map((d, i) => {
@@ -371,11 +371,11 @@ export default function GanttPage() {
                   const isToday = i === todayOffset
                   return (
                     <g key={`dn-${i}`}>
-                      {weekend && <rect x={x} y={ROW1} width={DAY_W} height={ROW2 + ROW3} fill="#08080F" />}
-                      <line x1={x} x2={x} y1={ROW1} y2={ROW1 + ROW2} stroke="#1E1E3A" strokeWidth={1} />
+                      {weekend && <rect x={x} y={ROW1} width={DAY_W} height={ROW2 + ROW3} fill="#0B0B0E" />}
+                      <line x1={x} x2={x} y1={ROW1} y2={ROW1 + ROW2} stroke="#202028" strokeWidth={1} />
                       <text
                         x={x + DAY_W / 2} y={ROW1 + ROW2 - 6}
-                        fill={isToday ? '#F97316' : weekend ? '#3A4455' : '#94A3B8'}
+                        fill={isToday ? '#F97316' : weekend ? '#4E4E58' : '#A2A2AE'}
                         fontSize={11} fontWeight={isToday ? 700 : 400}
                         fontFamily="Inter, sans-serif" textAnchor="middle"
                       >
@@ -384,7 +384,7 @@ export default function GanttPage() {
                     </g>
                   )
                 })}
-                <line x1={0} x2={svgW} y1={ROW1 + ROW2} y2={ROW1 + ROW2} stroke="#2D2D5E" strokeWidth={1} />
+                <line x1={0} x2={svgW} y1={ROW1 + ROW2} y2={ROW1 + ROW2} stroke="#26262E" strokeWidth={1} />
 
                 {/* Row 3 — Day-of-week abbreviations */}
                 {days.map((d, i) => {
@@ -393,10 +393,10 @@ export default function GanttPage() {
                   const weekend = dow === 0 || dow === 6
                   return (
                     <g key={`dow-${i}`}>
-                      <line x1={x} x2={x} y1={ROW1 + ROW2} y2={HDR_H} stroke="#1E1E3A" strokeWidth={1} />
+                      <line x1={x} x2={x} y1={ROW1 + ROW2} y2={HDR_H} stroke="#202028" strokeWidth={1} />
                       <text
                         x={x + DAY_W / 2} y={HDR_H - 6}
-                        fill={weekend ? '#2A3040' : '#3D4A60'}
+                        fill={weekend ? '#3A3A42' : '#56565F'}
                         fontSize={9} fontFamily="Inter, sans-serif" textAnchor="middle"
                       >
                         {DOW[dow]}
@@ -414,20 +414,20 @@ export default function GanttPage() {
             {/* Left panel (synced vertical scroll) */}
             <div
               ref={leftRef}
-              style={{ width: LW, flexShrink: 0, borderRight: '1px solid #2D2D5E', overflowY: 'hidden', background: '#0D0D1A' }}
+              style={{ width: LW, flexShrink: 0, borderRight: '1px solid #26262E', overflowY: 'hidden', background: '#101014' }}
             >
               {visibleRows.map((row, i) => {
                 const task  = row.task
                 const abbr  = subTeamAbbr(task.sub_team)
                 const stCol = subTeamColor(task.sub_team)
-                const rowBg = i % 2 === 0 ? '#1A1A35' : '#13132A'
+                const rowBg = i % 2 === 0 ? '#17171C' : '#121217'
                 return (
                   <div
                     key={row.id}
-                    style={{ height: ROW_H, flexShrink: 0, display: 'flex', alignItems: 'center', borderBottom: '1px solid #2D2D5E', background: rowBg }}
+                    style={{ height: ROW_H, flexShrink: 0, display: 'flex', alignItems: 'center', borderBottom: '1px solid #26262E', background: rowBg }}
                   >
                     <div style={{ width: LW_NAME, flexShrink: 0, padding: '0 6px 0 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 12, color: '#E2E8F0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 12, color: '#EDEDF2', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {task.title}
                       </span>
                       <span style={{
@@ -437,10 +437,10 @@ export default function GanttPage() {
                         {abbr}
                       </span>
                     </div>
-                    <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#64748B', textAlign: 'center' }}>
+                    <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#8A8A94', textAlign: 'center' }}>
                       {format(parseISO(task.start_date), 'MMM d')}
                     </div>
-                    <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#64748B', textAlign: 'center' }}>
+                    <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#8A8A94', textAlign: 'center' }}>
                       {format(parseISO(task.end_date), 'MMM d')}
                     </div>
                   </div>
@@ -463,7 +463,7 @@ export default function GanttPage() {
                   return (
                     <rect key={`wknd-${i}`}
                       x={i * DAY_W} y={0} width={DAY_W} height={svgH}
-                      fill="#08080F"
+                      fill="#0B0B0E"
                     />
                   )
                 })}
@@ -473,7 +473,7 @@ export default function GanttPage() {
                   <rect
                     key={row.id + '-bg'}
                     x={0} y={i * ROW_H} width={svgW} height={ROW_H}
-                    fill={i % 2 === 0 ? 'rgba(26,26,53,0.55)' : 'rgba(19,19,42,0.55)'}
+                    fill={i % 2 === 0 ? 'rgba(23,23,28,0.55)' : 'rgba(18,18,23,0.55)'}
                   />
                 ))}
 
@@ -481,7 +481,7 @@ export default function GanttPage() {
                 {days.map((_, i) => (
                   <line key={`vl-${i}`}
                     x1={i * DAY_W} x2={i * DAY_W} y1={0} y2={svgH}
-                    stroke="#1A1A30" strokeWidth={1}
+                    stroke="#1C1C22" strokeWidth={1}
                   />
                 ))}
 
@@ -489,7 +489,7 @@ export default function GanttPage() {
                 {visibleRows.map((_, i) => (
                   <line key={`hl-${i}`}
                     x1={0} x2={svgW} y1={(i + 1) * ROW_H} y2={(i + 1) * ROW_H}
-                    stroke="#2D2D5E" strokeWidth={1}
+                    stroke="#26262E" strokeWidth={1}
                   />
                 ))}
 
@@ -513,7 +513,7 @@ export default function GanttPage() {
                   const bw    = Math.max(DAY_W, dur * DAY_W)
                   const barY  = y + 7
                   const barH  = ROW_H - 14
-                  const color = phaseColorMap[task.phase] || '#64748B'
+                  const color = phaseColorMap[task.phase] || '#8A8A94'
                   const isHov = hoverId === task.id
                   const hW    = bw >= HNDL_W * 2 ? HNDL_W : Math.floor(bw / 2)
                   const innerW = Math.max(1, bw - hW * 2)
@@ -592,10 +592,10 @@ export default function GanttPage() {
                   return (
                     <g style={{ pointerEvents: 'none' }}>
                       <rect x={tx} y={ty} width={TT_W} height={TT_H} rx={7}
-                        fill="#1A1A38" stroke="#3B3B6E" strokeWidth={1}
+                        fill="#1E1E25" stroke="#3A3A44" strokeWidth={1}
                       />
                       <text x={tx + PAD} y={ty + 18}
-                        fill="#F1F5F9" fontSize={12} fontWeight={600}
+                        fill="#EDEDF2" fontSize={12} fontWeight={600}
                         fontFamily="Inter, sans-serif"
                       >
                         {tooltip.task.title.length > 22
@@ -603,13 +603,13 @@ export default function GanttPage() {
                           : tooltip.task.title}
                       </text>
                       <text x={tx + PAD} y={ty + 38}
-                        fill="#94A3B8" fontSize={10}
+                        fill="#A2A2AE" fontSize={10}
                         fontFamily="Inter, sans-serif"
                       >
                         {format(tooltip.ds, 'MMM d')} → {format(tooltip.de, 'MMM d')}
                       </text>
                       <text x={tx + PAD} y={ty + 57}
-                        fill="#64748B" fontSize={10}
+                        fill="#8A8A94" fontSize={10}
                         fontFamily="Inter, sans-serif"
                       >
                         {tooltip.dur} day{tooltip.dur !== 1 ? 's' : ''}
