@@ -69,10 +69,10 @@ export default function GanttPage() {
   const headerRef   = useRef(null)
   const leftRef     = useRef(null)
   const timelineRef = useRef(null)
-  const svgRef      = useRef(null)
   const dragging    = useRef(null)
   const activeHandlers = useRef({ move: null, up: null })
   const allTasksRef = useRef([])
+  const didAutoScroll = useRef(false)
 
   useEffect(() => { allTasksRef.current = tasks }, [tasks])
 
@@ -82,6 +82,38 @@ export default function GanttPage() {
   }, [user])
 
   const loading = tasksLoading || phasesLoading
+
+  // On first render with data, jump the timeline so today sits near the left edge
+  useEffect(() => {
+    if (loading || didAutoScroll.current || tasks.length === 0) return
+    const el = timelineRef.current
+    if (!el) return
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const rawMin = new Date(Math.min(...tasks.map(t => parseISO(t.start_date).getTime())))
+    const origin = addDays(rawMin, -3)
+    const todayX = differenceInDays(today, origin) * DAY_W
+    el.scrollLeft = Math.max(0, todayX - Math.floor(el.clientWidth / 4))
+    didAutoScroll.current = true
+  }, [loading, tasks])
+
+  // Mouse wheel pans the timeline horizontally (Shift+wheel scrolls rows).
+  // Native listener because React registers wheel as passive, blocking preventDefault.
+  useEffect(() => {
+    const el = timelineRef.current
+    if (!el || loading || tasks.length === 0) return
+    function onWheel(e) {
+      if (e.ctrlKey) return // let browser zoom through
+      const mult = e.deltaMode === 1 ? 40 : 1
+      if (e.shiftKey) {
+        el.scrollTop += e.deltaY * mult
+      } else {
+        el.scrollLeft += (e.deltaY + e.deltaX) * mult
+      }
+      e.preventDefault()
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [loading, tasks.length])
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
@@ -191,33 +223,229 @@ export default function GanttPage() {
     await fetchTasks()
   }
 
-  // ── Export PNG (SVG → canvas) ────────────────────────────────────────────────
+  // ── Export PNG (drawn directly on canvas: title + legend + panel + header + bars) ──
 
   function exportPNG() {
-    if (!svgRef.current) return
-    const svgEl = svgRef.current
-    const w = parseInt(svgEl.getAttribute('width'))
-    const h = parseInt(svgEl.getAttribute('height'))
-    const serialized = new XMLSerializer().serializeToString(svgEl)
-    const blob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' })
-    const url  = URL.createObjectURL(blob)
-    const img  = new Image()
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width  = w
-      canvas.height = h
-      const ctx = canvas.getContext('2d')
-      ctx.fillStyle = '#101014'
-      ctx.fillRect(0, 0, w, h)
-      ctx.drawImage(img, 0, 0)
-      URL.revokeObjectURL(url)
+    if (visibleRows.length === 0) return
+
+    const TITLE_H = 64
+    const PAD     = 16
+    const bodyH   = visibleRows.length * ROW_H
+    const totalW  = LW + svgW
+    const totalH  = TITLE_H + HDR_H + bodyH
+    const scale   = Math.min(2, 16000 / totalW, 16000 / totalH)
+
+    const canvas  = document.createElement('canvas')
+    canvas.width  = Math.round(totalW * scale)
+    canvas.height = Math.round(totalH * scale)
+    const ctx = canvas.getContext('2d')
+    ctx.scale(scale, scale)
+
+    const FONT = 'Inter, sans-serif'
+    const line = (x1, y1, x2, y2, color, width = 1) => {
+      ctx.strokeStyle = color
+      ctx.lineWidth = width
+      ctx.beginPath()
+      ctx.moveTo(x1 + 0.5, y1 + 0.5)
+      ctx.lineTo(x2 + 0.5, y2 + 0.5)
+      ctx.stroke()
+    }
+    const roundedRect = (x, y, w, h, r) => {
+      ctx.beginPath()
+      if (ctx.roundRect) ctx.roundRect(x, y, w, h, r)
+      else ctx.rect(x, y, w, h)
+    }
+    const truncate = (text, maxW) => {
+      if (ctx.measureText(text).width <= maxW) return text
+      let t = text
+      while (t.length > 0 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1)
+      return t + '…'
+    }
+
+    // Background
+    ctx.fillStyle = '#101014'
+    ctx.fillRect(0, 0, totalW, totalH)
+
+    // ── Title bar ──
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillStyle = '#EDEDF2'
+    ctx.font = `600 15px ${FONT}`
+    ctx.fillText('LEAN Hub — Project Timeline', PAD, 27)
+    ctx.fillStyle = '#70707C'
+    ctx.font = `400 11px ${FONT}`
+    ctx.fillText(
+      `Exported ${format(new Date(), 'MMM d, yyyy')} · ${visibleRows.length} task${visibleRows.length !== 1 ? 's' : ''}`,
+      PAD, 46,
+    )
+
+    // Phase legend, right-aligned in the title bar
+    ctx.font = `500 11px ${FONT}`
+    const legendItems = phases.map(p => ({ ...p, w: 16 + ctx.measureText(p.name).width + 18 }))
+    const legendW = legendItems.reduce((s, i) => s + i.w, 0)
+    let lx = totalW - PAD - legendW
+    if (lx > 320) {
+      for (const it of legendItems) {
+        ctx.fillStyle = it.color
+        roundedRect(lx, 23, 10, 10, 2)
+        ctx.fill()
+        ctx.fillStyle = '#A2A2AE'
+        ctx.fillText(it.name, lx + 16, 32)
+        lx += it.w
+      }
+    }
+    line(0, TITLE_H, totalW, TITLE_H, '#26262E')
+
+    // ── Header: left panel column labels ──
+    ctx.fillStyle = '#70707C'
+    ctx.font = `600 10px ${FONT}`
+    ctx.fillText('TASK', 12, TITLE_H + HDR_H - 10)
+    ctx.textAlign = 'center'
+    ctx.fillText('FROM', LW_NAME + LW_DATE / 2, TITLE_H + HDR_H - 10)
+    ctx.fillText('TO',   LW_NAME + LW_DATE * 1.5, TITLE_H + HDR_H - 10)
+    ctx.textAlign = 'left'
+
+    // ── Header: month labels ──
+    ctx.font = `600 11px ${FONT}`
+    for (const ms of monthSpans) {
+      line(LW + ms.x, TITLE_H, LW + ms.x, TITLE_H + ROW1, '#26262E')
+      if (ms.w >= 60) {
+        ctx.fillStyle = '#EDEDF2'
+        ctx.fillText(ms.label, LW + ms.x + 8, TITLE_H + ROW1 - 7)
+      }
+    }
+    line(LW, TITLE_H + ROW1, totalW, TITLE_H + ROW1, '#26262E')
+
+    // ── Header: day numbers + day-of-week ──
+    ctx.textAlign = 'center'
+    days.forEach((d, i) => {
+      const x = LW + i * DAY_W
+      const weekend = isWeekend(d)
+      const isToday = i === todayOffset
+      if (weekend) {
+        ctx.fillStyle = '#0B0B0E'
+        ctx.fillRect(x, TITLE_H + ROW1, DAY_W, ROW2 + ROW3)
+      }
+      line(x, TITLE_H + ROW1, x, TITLE_H + HDR_H, '#202028')
+      ctx.font = isToday ? `700 11px ${FONT}` : `400 11px ${FONT}`
+      ctx.fillStyle = isToday ? '#F97316' : weekend ? '#4E4E58' : '#A2A2AE'
+      ctx.fillText(format(d, 'd'), x + DAY_W / 2, TITLE_H + ROW1 + ROW2 - 6)
+      ctx.font = `400 9px ${FONT}`
+      ctx.fillStyle = weekend ? '#3A3A42' : '#56565F'
+      ctx.fillText(DOW[getDay(d)], x + DAY_W / 2, TITLE_H + HDR_H - 6)
+    })
+    ctx.textAlign = 'left'
+    line(LW, TITLE_H + ROW1 + ROW2, totalW, TITLE_H + ROW1 + ROW2, '#26262E')
+    line(0, TITLE_H + HDR_H, totalW, TITLE_H + HDR_H, '#26262E')
+
+    const yB = TITLE_H + HDR_H
+
+    // ── Body: timeline background (weekends, row stripes, grid) ──
+    days.forEach((d, i) => {
+      if (!isWeekend(d)) return
+      ctx.fillStyle = '#0B0B0E'
+      ctx.fillRect(LW + i * DAY_W, yB, DAY_W, bodyH)
+    })
+    visibleRows.forEach((_, i) => {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(23,23,28,0.55)' : 'rgba(18,18,23,0.55)'
+      ctx.fillRect(LW, yB + i * ROW_H, svgW, ROW_H)
+    })
+    days.forEach((_, i) => line(LW + i * DAY_W, yB, LW + i * DAY_W, yB + bodyH, '#1C1C22'))
+    visibleRows.forEach((_, i) => line(LW, yB + (i + 1) * ROW_H, totalW, yB + (i + 1) * ROW_H, '#26262E'))
+
+    // ── Body: left panel rows ──
+    ctx.textBaseline = 'middle'
+    visibleRows.forEach((row, i) => {
+      const task = row.task
+      const y    = yB + i * ROW_H
+      const cy   = y + ROW_H / 2
+      ctx.fillStyle = i % 2 === 0 ? '#17171C' : '#121217'
+      ctx.fillRect(0, y, LW, ROW_H)
+      line(0, y + ROW_H, LW, y + ROW_H, '#26262E')
+
+      // Sub-team chip, right-aligned in the name column
+      const abbr  = subTeamAbbr(task.sub_team)
+      const stCol = subTeamColor(task.sub_team)
+      ctx.font = `700 9px ${FONT}`
+      const chipTextW = ctx.measureText(abbr).width
+      const chipW = chipTextW + 10
+      const chipX = LW_NAME - chipW - 8
+      ctx.fillStyle = stCol + '26'
+      roundedRect(chipX, cy - 7, chipW, 14, 4)
+      ctx.fill()
+      ctx.strokeStyle = stCol + '55'
+      ctx.lineWidth = 1
+      roundedRect(chipX + 0.5, cy - 6.5, chipW - 1, 13, 4)
+      ctx.stroke()
+      ctx.fillStyle = stCol
+      ctx.fillText(abbr, chipX + 5, cy + 0.5)
+
+      // Task title, truncated to fit before the chip
+      ctx.font = `400 12px ${FONT}`
+      ctx.fillStyle = '#EDEDF2'
+      ctx.fillText(truncate(task.title, chipX - 12 - 6), 12, cy)
+
+      // From / to dates
+      ctx.font = `400 11px ${FONT}`
+      ctx.fillStyle = '#8A8A94'
+      ctx.textAlign = 'center'
+      ctx.fillText(format(parseISO(task.start_date), 'MMM d'), LW_NAME + LW_DATE / 2, cy)
+      ctx.fillText(format(parseISO(task.end_date), 'MMM d'), LW_NAME + LW_DATE * 1.5, cy)
+      ctx.textAlign = 'left'
+    })
+
+    // ── Body: task bars ──
+    visibleRows.forEach((row, i) => {
+      const task  = row.task
+      const ds    = parseISO(task.start_date)
+      const de    = parseISO(task.end_date)
+      const bx    = LW + toX(ds, origin)
+      const dur   = differenceInDays(de, ds) + 1
+      const bw    = Math.max(DAY_W, dur * DAY_W)
+      const barY  = yB + i * ROW_H + 7
+      const barH  = ROW_H - 14
+      const color = phaseColorMap[task.phase] || '#70707C'
+      const pct   = { done: 100, review: 75, in_progress: 50, not_started: 0 }[task.status] ?? 0
+
+      ctx.fillStyle = color
+      roundedRect(bx, barY, bw, barH, 4)
+      ctx.fill()
+
+      ctx.save()
+      roundedRect(bx, barY, bw, barH, 4)
+      ctx.clip()
+      if (pct > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.18)'
+        ctx.fillRect(bx, barY, bw * (pct / 100), barH)
+      }
+      ctx.font = `500 11px ${FONT}`
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillText(`${task.title} · ${subTeamAbbr(task.sub_team)}`, bx + 8, barY + barH / 2)
+      ctx.restore()
+    })
+
+    // ── Today marker ──
+    if (todayOffset >= 0 && todayOffset < totalDays) {
+      ctx.setLineDash([5, 4])
+      line(LW + todayX, yB, LW + todayX, yB + bodyH, '#F97316', 1.5)
+      ctx.setLineDash([])
+    }
+
+    // Panel divider + outer border
+    line(LW, TITLE_H, LW, totalH, '#26262E')
+    ctx.strokeStyle = '#26262E'
+    ctx.lineWidth = 1
+    ctx.strokeRect(0.5, 0.5, totalW - 1, totalH - 1)
+
+    canvas.toBlob(blob => {
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.download = `gantt-${format(new Date(), 'yyyy-MM-dd')}.png`
-      a.href = canvas.toDataURL('image/png')
+      a.href = url
       a.click()
-    }
-    img.onerror = () => URL.revokeObjectURL(url)
-    img.src = url
+      setTimeout(() => URL.revokeObjectURL(url), 5_000)
+    }, 'image/png')
   }
 
   // ── Loading state ─────────────────────────────────────────────────────────────
@@ -302,7 +530,7 @@ export default function GanttPage() {
         <div>
           <h1 className="page-title">Gantt Chart</h1>
           <p className="page-subtitle">
-            {tasks.length} task{tasks.length !== 1 ? 's' : ''} · drag bars to move or resize
+            {tasks.length} task{tasks.length !== 1 ? 's' : ''} · drag bars to move or resize · scroll to pan, Shift+scroll for rows
           </p>
         </div>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -455,7 +683,7 @@ export default function GanttPage() {
               className="gantt-scroll"
               style={{ flex: 1, overflowX: 'auto', overflowY: 'auto' }}
             >
-              <svg ref={svgRef} width={svgW} height={svgH} style={{ display: 'block' }}>
+              <svg width={svgW} height={svgH} style={{ display: 'block' }}>
 
                 {/* Weekend column shading (below everything else) */}
                 {days.map((d, i) => {
