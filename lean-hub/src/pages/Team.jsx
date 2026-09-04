@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Users, CheckSquare, Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import Avatar from '../components/Avatar'
+import { SUB_TEAMS, DEFAULT_SUB_TEAM } from '../lib/teams'
+import { assigneeIds } from '../lib/taskPeople'
 
 const ROLE_COLORS = {
   'Team Lead': { bg: 'rgba(222,146,96,0.12)',  color: '#DE9260', border: 'rgba(222,146,96,0.3)' },
@@ -9,12 +11,6 @@ const ROLE_COLORS = {
   'CS':        { bg: 'rgba(108,166,232,0.12)', color: '#6CA6E8', border: 'rgba(108,166,232,0.3)' },
   'Member':    { bg: 'rgba(157,162,174,0.1)',  color: '#9DA2AE', border: 'rgba(157,162,174,0.3)' },
 }
-
-const SUB_TEAMS = [
-  { name: 'Full Team',  color: '#6CA6E8', abbr: 'FT', bg: 'rgba(108,166,232,0.1)', border: 'rgba(108,166,232,0.3)' },
-  { name: 'Mechanical', color: '#DE9260', abbr: 'MT', bg: 'rgba(222,146,96,0.1)',  border: 'rgba(222,146,96,0.3)' },
-  { name: 'Electrical', color: '#D9A73F', abbr: 'ET', bg: 'rgba(217,167,63,0.1)',  border: 'rgba(217,167,63,0.3)' },
-]
 
 function getRoleStyle(role) {
   return ROLE_COLORS[role] || ROLE_COLORS.Member
@@ -35,7 +31,7 @@ export default function Team() {
   }
 
   async function fetchTasks() {
-    const { data } = await supabase.from('tasks').select('assigned_to, status, sub_team')
+    const { data } = await supabase.from('tasks').select('assigned_to, assignee_ids, status, sub_team')
     setTasks(data || [])
   }
 
@@ -43,16 +39,18 @@ export default function Team() {
   const profileStats = {}
   const profileSubTeams = {}
   for (const t of tasks) {
-    if (!t.assigned_to) continue
-    if (!profileStats[t.assigned_to]) profileStats[t.assigned_to] = { total: 0, inProgress: 0, done: 0 }
-    const s = profileStats[t.assigned_to]
-    s.total++
-    if (t.status === 'in_progress') s.inProgress++
-    if (t.status === 'done') s.done++
+    // A task counts once for every person it is assigned to
+    for (const id of assigneeIds(t)) {
+      if (!profileStats[id]) profileStats[id] = { total: 0, inProgress: 0, done: 0 }
+      const s = profileStats[id]
+      s.total++
+      if (t.status === 'in_progress') s.inProgress++
+      if (t.status === 'done') s.done++
 
-    const team = t.sub_team || 'Full Team'
-    if (!profileSubTeams[t.assigned_to]) profileSubTeams[t.assigned_to] = {}
-    profileSubTeams[t.assigned_to][team] = (profileSubTeams[t.assigned_to][team] || 0) + 1
+      const team = t.sub_team || DEFAULT_SUB_TEAM
+      if (!profileSubTeams[id]) profileSubTeams[id] = {}
+      profileSubTeams[id][team] = (profileSubTeams[id][team] || 0) + 1
+    }
   }
 
   const EMPTY_STATS = { total: 0, inProgress: 0, done: 0 }
@@ -67,7 +65,7 @@ export default function Team() {
   // Group profiles by primary sub-team for the roster section
   const rosterBySubTeam = {}
   for (const p of profiles) {
-    const st = primarySubTeam(p.id) || 'Full Team'
+    const st = primarySubTeam(p.id) || DEFAULT_SUB_TEAM
     if (!rosterBySubTeam[st]) rosterBySubTeam[st] = []
     rosterBySubTeam[st].push(p)
   }
@@ -126,7 +124,7 @@ export default function Team() {
                           <span key={st.name} style={{
                             display: 'inline-flex', alignItems: 'center', gap: 4,
                             padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600,
-                            background: st.bg, color: st.color, border: `1px solid ${st.border}`,
+                            background: st.color + '1A', color: st.color, border: `1px solid ${st.color}4D`,
                           }}>
                             {st.abbr} {st.name}
                             <span style={{ opacity: 0.7, fontWeight: 400 }}>({memberTeams[st.name]})</span>
@@ -184,7 +182,7 @@ export default function Team() {
                       display: 'flex', alignItems: 'center', gap: 10,
                       padding: '14px 16px',
                       borderBottom: '1px solid var(--border)',
-                      background: st.bg,
+                      background: st.color + '1A',
                     }}>
                       <div style={{ width: 10, height: 10, borderRadius: '50%', background: st.color, flexShrink: 0 }} />
                       <span style={{ fontSize: 13, fontWeight: 700, color: st.color, flex: 1 }}>{st.name}</span>

@@ -4,12 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useCustomPhases } from '../hooks/useCustomPhases'
 import { useCustomStatuses, statusToValue } from '../hooks/useCustomStatuses'
-
-const SUB_TEAMS = [
-  { name: 'Full Team',  color: '#3B82F6', abbr: 'FT' },
-  { name: 'Mechanical', color: '#F97316', abbr: 'MT' },
-  { name: 'Electrical', color: '#EAB308', abbr: 'ET' },
-]
+import { SUB_TEAMS } from '../lib/teams'
 
 const SECTION = {
   background: 'var(--bg-secondary)',

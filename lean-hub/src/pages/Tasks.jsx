@@ -3,19 +3,15 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { Plus, Calendar, GripVertical, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import Avatar from '../components/Avatar'
+import AvatarStack from '../components/AvatarStack'
 import TaskModal from '../components/TaskModal'
 import { format, isPast, parseISO } from 'date-fns'
 import { useCustomPhases } from '../hooks/useCustomPhases'
 import { useCustomStatuses, statusToValue } from '../hooks/useCustomStatuses'
+import { SUB_TEAMS, subTeamOf, DEFAULT_SUB_TEAM } from '../lib/teams'
+import { assigneesOf, isAssignedTo } from '../lib/taskPeople'
 
-const TASK_SELECT = '*, assignee:profiles!tasks_assigned_to_fkey(id, full_name), creator:profiles!tasks_created_by_fkey(id, full_name)'
-
-const SUB_TEAM_STYLE = {
-  'Full Team':  { color: '#6CA6E8', abbr: 'FT' },
-  'Mechanical': { color: '#DE9260', abbr: 'MT' },
-  'Electrical': { color: '#D9A73F', abbr: 'ET' },
-}
+const TASK_SELECT = '*, creator:profiles!tasks_created_by_fkey(id, full_name)'
 
 export default function Tasks() {
   const location = useLocation()
@@ -151,9 +147,9 @@ export default function Tasks() {
   }
 
   const filtered = tasks.filter(t => {
-    if (filterAssignee && t.assigned_to !== filterAssignee) return false
+    if (filterAssignee && !isAssignedTo(t, filterAssignee)) return false
     if (filterPriority && t.priority !== filterPriority) return false
-    if (filterSubTeam && (t.sub_team || 'Full Team') !== filterSubTeam) return false
+    if (filterSubTeam && (t.sub_team || DEFAULT_SUB_TEAM) !== filterSubTeam) return false
     return true
   })
 
@@ -181,9 +177,7 @@ export default function Tasks() {
           </select>
           <select className="select" value={filterSubTeam} onChange={e => setFilterSubTeam(e.target.value)} style={{ width: 'auto', minWidth: 120 }}>
             <option value="">All Sub-teams</option>
-            <option value="Full Team">Full Team</option>
-            <option value="Mechanical">Mechanical</option>
-            <option value="Electrical">Electrical</option>
+            {SUB_TEAMS.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
           </select>
           <button className="btn btn-primary" onClick={() => { setEditingTask(null); setShowModal(true) }}>
             <Plus size={15} /> New Task
@@ -230,6 +224,7 @@ export default function Tasks() {
                                 onClick={() => { setEditingTask(task); setShowModal(true) }}
                                 onDelete={handleDelete}
                                 phaseColorMap={phaseColorMap}
+                                profiles={profiles}
                               />
                             )}
                           </Draggable>
@@ -259,13 +254,14 @@ export default function Tasks() {
   )
 }
 
-function TaskCard({ task, provided, isDragging, onClick, onDelete, phaseColorMap }) {
+function TaskCard({ task, provided, isDragging, onClick, onDelete, phaseColorMap, profiles }) {
   const [deleteError, setDeleteError] = useState('')
   const isOverdue = task.end_date && task.status !== 'done' && isPast(parseISO(task.end_date))
 
   const phaseColor = phaseColorMap?.[task.phase] || '#70707C'
-  const subTeam = task.sub_team || 'Full Team'
-  const stStyle = SUB_TEAM_STYLE[subTeam] || SUB_TEAM_STYLE['Full Team']
+  const subTeam = task.sub_team || DEFAULT_SUB_TEAM
+  const stStyle = subTeamOf(subTeam)
+  const assignees = assigneesOf(task, profiles)
 
   return (
     <div
@@ -315,11 +311,7 @@ function TaskCard({ task, provided, isDragging, onClick, onDelete, phaseColorMap
             {task.title}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {task.assignee?.full_name ? (
-              <Avatar name={task.assignee.full_name} size="sm" />
-            ) : (
-              <div style={{ width: 28, height: 28, borderRadius: '50%', border: '1px dashed var(--border-strong)', flexShrink: 0 }} />
-            )}
+            <AvatarStack people={assignees} />
             <span
               title={subTeam}
               style={{

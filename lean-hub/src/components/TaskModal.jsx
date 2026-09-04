@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Send, Paperclip, Trash2, AlertCircle } from 'lucide-react'
+import { X, Send, Paperclip, Trash2, AlertCircle, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Avatar from './Avatar'
@@ -7,6 +7,8 @@ import { format } from 'date-fns'
 import { useCustomPhases } from '../hooks/useCustomPhases'
 import { useCustomStatuses, statusToValue } from '../hooks/useCustomStatuses'
 import { validateTaskDates } from '../lib/dates'
+import { SUB_TEAMS, DEFAULT_SUB_TEAM } from '../lib/teams'
+import { assigneeIds, assigneeFields } from '../lib/taskPeople'
 
 const SAFE_NAME_RE = /[^a-zA-Z0-9._-]/g
 
@@ -17,7 +19,6 @@ const PRIORITIES = [
   { value: 'critical', label: 'Critical' },
 ]
 
-const SUB_TEAMS = ['Full Team', 'Mechanical', 'Electrical']
 
 export default function TaskModal({ task, profiles, onClose, onSave, onCreate, onDelete }) {
   const { user, profile } = useAuth()
@@ -28,11 +29,11 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
   const [form, setForm] = useState({
     title:       task?.title       || '',
     description: task?.description || '',
-    assigned_to: task?.assigned_to || '',
+    assignee_ids: assigneeIds(task),
     status:      task?.status      || 'not_started',
     priority:    task?.priority    || 'medium',
     phase:       task?.phase       || 'Research',
-    sub_team:    task?.sub_team    || 'Full Team',
+    sub_team:    task?.sub_team    || DEFAULT_SUB_TEAM,
     start_date:  task?.start_date  || '',
     end_date:    task?.end_date    || '',
   })
@@ -99,11 +100,12 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
     }
     setSaving(true)
     setSaveError('')
+    const { assignee_ids, ...rest } = form
     const sanitized = {
-      ...form,
-      assigned_to: form.assigned_to || null,
-      start_date:  form.start_date  || null,
-      end_date:    form.end_date    || null,
+      ...rest,
+      ...assigneeFields(assignee_ids),
+      start_date: form.start_date || null,
+      end_date:   form.end_date   || null,
     }
     try {
       if (isNew) {
@@ -179,6 +181,15 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
 
   const set = (key) => (e) => setForm(prev => ({ ...prev, [key]: e.target.value }))
 
+  function toggleAssignee(id) {
+    setForm(prev => ({
+      ...prev,
+      assignee_ids: prev.assignee_ids.includes(id)
+        ? prev.assignee_ids.filter(x => x !== id)
+        : [...prev.assignee_ids, id],
+    }))
+  }
+
   return (
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal fade-in" style={{ maxWidth: isNew ? 580 : 700 }}>
@@ -230,8 +241,8 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
             </div>
           </div>
 
-          {/* Row: phase + sub_team + assignee */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          {/* Row: phase + sub_team */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="form-group">
               <label htmlFor="task-phase">Phase</label>
               <select id="task-phase" className="select" value={form.phase} onChange={set('phase')}>
@@ -241,18 +252,48 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
             <div className="form-group">
               <label htmlFor="task-subteam">Sub-team</label>
               <select id="task-subteam" className="select" value={form.sub_team} onChange={set('sub_team')}>
-                {SUB_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+                {SUB_TEAMS.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
               </select>
             </div>
-            <div className="form-group">
-              <label htmlFor="task-assignee">Assigned To</label>
-              <select id="task-assignee" className="select" value={form.assigned_to} onChange={set('assigned_to')}>
-                <option value="">Unassigned</option>
-                {profiles.map(p => (
-                  <option key={p.id} value={p.id}>{p.full_name}</option>
-                ))}
-              </select>
+          </div>
+
+          {/* Assignees — a task can belong to several people */}
+          <div className="form-group">
+            <label>Assigned To</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {profiles.length === 0 && (
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No team members yet</span>
+              )}
+              {profiles.map(p => {
+                const selected = form.assignee_ids.includes(p.id)
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => toggleAssignee(p.id)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                      padding: '4px 10px 4px 4px', borderRadius: 99,
+                      border: `1px solid ${selected ? 'var(--accent)' : 'var(--border-strong)'}`,
+                      background: selected ? 'var(--accent-subtle)' : 'transparent',
+                      color: selected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontSize: 12, fontWeight: 500,
+                      transition: 'background 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease)',
+                    }}
+                  >
+                    <Avatar name={p.full_name} size="sm" />
+                    {p.full_name}
+                    {selected && <Check size={12} />}
+                  </button>
+                )
+              })}
             </div>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+              {form.assignee_ids.length === 0
+                ? 'Unassigned — click a name to assign'
+                : `${form.assignee_ids.length} assigned`}
+            </p>
           </div>
 
           {/* Row: dates */}

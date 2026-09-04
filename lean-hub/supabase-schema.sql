@@ -246,3 +246,22 @@ ALTER TABLE custom_statuses ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Auth users full access statuses"
   ON custom_statuses FOR ALL
   USING (auth.role() = 'authenticated');
+
+
+-- ─────────────────────────────────────────
+-- FEATURE: MULTIPLE ASSIGNEES + CSE SUB-TEAM
+-- Also available standalone in migration-multi-assignee-and-cse.sql
+-- ─────────────────────────────────────────
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_sub_team_check;
+ALTER TABLE tasks ADD CONSTRAINT tasks_sub_team_check
+  CHECK (sub_team IN ('Full Team', 'Mechanical', 'Electrical', 'CSE'));
+
+-- assigned_to is retained and kept in sync as the first assignee so this is reversible.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_ids uuid[] NOT NULL DEFAULT '{}';
+
+UPDATE tasks
+   SET assignee_ids = ARRAY[assigned_to]
+ WHERE assigned_to IS NOT NULL
+   AND (assignee_ids IS NULL OR assignee_ids = '{}');
+
+CREATE INDEX IF NOT EXISTS tasks_assignee_ids_idx ON tasks USING gin (assignee_ids);

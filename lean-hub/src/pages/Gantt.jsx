@@ -1,17 +1,19 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { format, parseISO, differenceInDays, addDays, getDay, isValid } from 'date-fns'
-import { Download, AlertTriangle } from 'lucide-react'
+import { Download, AlertTriangle, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import TaskModal from '../components/TaskModal'
 import { useCustomPhases } from '../hooks/useCustomPhases'
 import { parseTaskDate, isDateInRange, MAX_YEARS_FROM_TODAY } from '../lib/dates'
+import { subTeamAbbr, subTeamColor } from '../lib/teams'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const LW_NAME = 220
 const LW_DATE = 100
-const LW      = LW_NAME + LW_DATE * 2   // 420px total left panel
+const LW      = LW_NAME + LW_DATE * 2   // 420px full left panel (always used for PNG export)
+const LW_COMPACT = 190                  // name-only panel, to give the chart more room
 const ROW_H   = 48
 const HDR_H   = 72                       // 3 rows × 24px each
 const ROW1    = 24                       // month label row height
@@ -36,18 +38,6 @@ function darken(hex) {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
 }
 
-function subTeamAbbr(st) {
-  if (st === 'Mechanical') return 'MT'
-  if (st === 'Electrical') return 'ET'
-  return 'FT'
-}
-
-function subTeamColor(st) {
-  if (st === 'Mechanical') return '#DE9260'
-  if (st === 'Electrical') return '#D9A73F'
-  return '#6CA6E8'
-}
-
 function isWeekend(date) {
   const d = getDay(date)
   return d === 0 || d === 6
@@ -66,6 +56,9 @@ export default function GanttPage() {
   const [dragState, setDragState]   = useState(null)
   const [hoverId, setHoverId]       = useState(null)
   const [tooltip, setTooltip]       = useState(null)
+  const [showDates, setShowDates]   = useState(() => {
+    try { return localStorage.getItem('gantt-show-dates') === 'true' } catch { return false }
+  })
 
   const headerRef   = useRef(null)
   const leftRef     = useRef(null)
@@ -76,6 +69,14 @@ export default function GanttPage() {
   const didAutoScroll = useRef(false)
 
   useEffect(() => { allTasksRef.current = tasks }, [tasks])
+
+  useEffect(() => {
+    try { localStorage.setItem('gantt-show-dates', String(showDates)) } catch { /* private mode */ }
+  }, [showDates])
+
+  // Collapsing the From/To columns hands ~230px back to the timeline
+  const panelW = showDates ? LW : LW_COMPACT
+  const nameW  = showDates ? LW_NAME : LW_COMPACT
 
   useEffect(() => {
     if (!user) return
@@ -158,7 +159,7 @@ export default function GanttPage() {
   async function fetchTasks() {
     const { data } = await supabase
       .from('tasks')
-      .select('*, assignee:profiles!tasks_assigned_to_fkey(id, full_name), creator:profiles!tasks_created_by_fkey(id, full_name)')
+      .select('*, creator:profiles!tasks_created_by_fkey(id, full_name)')
       .not('start_date', 'is', null)
       .not('end_date', 'is', null)
     setTasks(data || [])
@@ -569,6 +570,17 @@ export default function GanttPage() {
           ))}
           <button
             className="btn btn-secondary"
+            onClick={() => setShowDates(v => !v)}
+            title={showDates
+              ? 'Hide the From/To columns so more of the timeline fits'
+              : 'Show the From/To date columns'}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+          >
+            {showDates ? <ChevronsLeft size={14} /> : <ChevronsRight size={14} />}
+            {showDates ? 'Hide dates' : 'Show dates'}
+          </button>
+          <button
+            className="btn btn-secondary"
             onClick={exportPNG}
             style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
           >
@@ -614,12 +626,14 @@ export default function GanttPage() {
 
             {/* Left panel header */}
             <div style={{
-              width: LW, flexShrink: 0, display: 'flex', alignItems: 'flex-end',
+              width: panelW, flexShrink: 0, display: 'flex', alignItems: 'flex-end',
               height: HDR_H, borderRight: '1px solid #26262E', background: '#101014',
             }}>
-              <div style={{ width: LW_NAME, padding: '0 12px 10px', fontSize: 11, fontWeight: 600, color: '#70707C', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Task</div>
-              <div style={{ width: LW_DATE, paddingBottom: 10, fontSize: 11, fontWeight: 600, color: '#70707C', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>From</div>
-              <div style={{ width: LW_DATE, paddingBottom: 10, fontSize: 11, fontWeight: 600, color: '#70707C', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>To</div>
+              <div style={{ width: nameW, padding: '0 12px 10px', fontSize: 11, fontWeight: 600, color: '#70707C', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Task</div>
+              {showDates && <>
+                <div style={{ width: LW_DATE, paddingBottom: 10, fontSize: 11, fontWeight: 600, color: '#70707C', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>From</div>
+                <div style={{ width: LW_DATE, paddingBottom: 10, fontSize: 11, fontWeight: 600, color: '#70707C', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>To</div>
+              </>}
             </div>
 
             {/* Timeline header (hidden overflow, synced with body scroll) */}
@@ -690,7 +704,7 @@ export default function GanttPage() {
             {/* Left panel (synced vertical scroll) */}
             <div
               ref={leftRef}
-              style={{ width: LW, flexShrink: 0, borderRight: '1px solid #26262E', overflowY: 'hidden', background: '#101014' }}
+              style={{ width: panelW, flexShrink: 0, borderRight: '1px solid #26262E', overflowY: 'hidden', background: '#101014' }}
             >
               {visibleRows.map((row, i) => {
                 const task  = row.task
@@ -702,7 +716,7 @@ export default function GanttPage() {
                     key={row.id}
                     style={{ height: ROW_H, flexShrink: 0, display: 'flex', alignItems: 'center', borderBottom: '1px solid #26262E', background: rowBg }}
                   >
-                    <div style={{ width: LW_NAME, flexShrink: 0, padding: '0 6px 0 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: nameW, flexShrink: 0, padding: '0 6px 0 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 12, color: '#EDEDF2', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {task.title}
                       </span>
@@ -713,12 +727,14 @@ export default function GanttPage() {
                         {abbr}
                       </span>
                     </div>
-                    <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#8A8A94', textAlign: 'center' }}>
-                      {format(parseISO(task.start_date), 'MMM d')}
-                    </div>
-                    <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#8A8A94', textAlign: 'center' }}>
-                      {format(parseISO(task.end_date), 'MMM d')}
-                    </div>
+                    {showDates && <>
+                      <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#8A8A94', textAlign: 'center' }}>
+                        {format(parseISO(task.start_date), 'MMM d')}
+                      </div>
+                      <div style={{ width: LW_DATE, flexShrink: 0, fontSize: 11, color: '#8A8A94', textAlign: 'center' }}>
+                        {format(parseISO(task.end_date), 'MMM d')}
+                      </div>
+                    </>}
                   </div>
                 )
               })}
