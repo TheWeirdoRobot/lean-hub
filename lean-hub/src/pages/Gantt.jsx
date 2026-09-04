@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import TaskModal from '../components/TaskModal'
 import { useCustomPhases } from '../hooks/useCustomPhases'
+import { parseTaskDate, isDateInRange, MAX_YEARS_FROM_TODAY } from '../lib/dates'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -21,23 +22,10 @@ const HNDL_W  = 8
 const MS_DAY  = 86_400_000
 const DOW     = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
-// A charted date must parse AND land within this many years of today. Postgres
-// `date` columns and <input type="date"> both accept years far outside the range
-// JavaScript's Date can represent (a mistyped year such as 20260-07-01 saves
-// fine), and a single one of those turns `origin` into an Invalid Date, which
-// makes every format() call on this page throw RangeError.
-const MAX_YEARS_FROM_TODAY = 5
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function toX(date, origin) {
   return differenceInDays(date, origin) * DAY_W
-}
-
-function parseTaskDate(value) {
-  if (typeof value !== 'string') return null
-  const d = parseISO(value)
-  return isValid(d) ? d : null
 }
 
 function darken(hex) {
@@ -94,19 +82,29 @@ export default function GanttPage() {
     loadAll()
   }, [user])
 
+  // Live sync: pick up teammates' task changes without a manual refresh
+  useEffect(() => {
+    const channel = supabase
+      .channel('gantt-tasks')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        // Refetching mid-drag would yank the bar out from under the cursor;
+        // the drag's own save refetches when it finishes.
+        if (dragging.current) return
+        fetchTasks()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
   const loading = tasksLoading || phasesLoading
 
   // Split off tasks whose dates can't be charted so one bad row can't break the page
   const { datedTasks, skippedTasks } = useMemo(() => {
-    const now = new Date()
-    const minYear = now.getFullYear() - MAX_YEARS_FROM_TODAY
-    const maxYear = now.getFullYear() + MAX_YEARS_FROM_TODAY
-    const inRange = d => d.getFullYear() >= minYear && d.getFullYear() <= maxYear
     const ok = [], bad = []
     for (const t of tasks) {
       const s = parseTaskDate(t.start_date)
       const e = parseTaskDate(t.end_date)
-      if (s && e && inRange(s) && inRange(e)) ok.push(t)
+      if (s && e && isDateInRange(s) && isDateInRange(e)) ok.push(t)
       else bad.push(t)
     }
     return { datedTasks: ok, skippedTasks: bad }

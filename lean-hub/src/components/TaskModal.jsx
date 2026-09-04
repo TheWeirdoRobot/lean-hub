@@ -6,6 +6,7 @@ import Avatar from './Avatar'
 import { format } from 'date-fns'
 import { useCustomPhases } from '../hooks/useCustomPhases'
 import { useCustomStatuses, statusToValue } from '../hooks/useCustomStatuses'
+import { validateTaskDates } from '../lib/dates'
 
 const SAFE_NAME_RE = /[^a-zA-Z0-9._-]/g
 
@@ -91,6 +92,11 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
 
   async function handleSave() {
     if (!form.title.trim()) return
+    const dateError = validateTaskDates(form.start_date, form.end_date)
+    if (dateError) {
+      setSaveError(dateError)
+      return
+    }
     setSaving(true)
     setSaveError('')
     const sanitized = {

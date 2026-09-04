@@ -39,6 +39,18 @@ export default function Dashboard() {
     Promise.all([fetchTasks(), fetchProfiles(), fetchActivity()]).finally(() => setLoading(false))
   }, [])
 
+  // Live sync: keep the counters and activity feed current as the team works
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard-tasks')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        fetchTasks()
+        fetchActivity()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
   async function fetchTasks() {
     const { data, error } = await supabase
       .from('tasks')

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { Plus, Calendar, GripVertical, X } from 'lucide-react'
@@ -35,6 +35,9 @@ export default function Tasks() {
 
   const [pendingOpenId, setPendingOpenId] = useState(location.state?.openTaskId || null)
 
+  const isDragging   = useRef(false)
+  const missedUpdate = useRef(false)
+
   const loading = dataLoading || statusesLoading || phasesLoading
 
   // Build kanban columns dynamically from custom statuses
@@ -46,6 +49,23 @@ export default function Tasks() {
 
   useEffect(() => {
     Promise.all([fetchTasks(), fetchProfiles()]).finally(() => setDataLoading(false))
+  }, [])
+
+  // Live sync: pick up teammates' task changes without a manual refresh
+  useEffect(() => {
+    const channel = supabase
+      .channel('board-tasks')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        // Replacing the list mid-drag drops the card being dragged, so defer
+        // until the drag finishes.
+        if (isDragging.current) {
+          missedUpdate.current = true
+          return
+        }
+        fetchTasks()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   useEffect(() => {
@@ -73,12 +93,23 @@ export default function Tasks() {
     setProfiles(data || [])
   }
 
+  function flushMissedUpdate() {
+    if (!missedUpdate.current) return
+    missedUpdate.current = false
+    fetchTasks()
+  }
+
   async function handleDragEnd(result) {
+    isDragging.current = false
     const { destination, source, draggableId } = result
-    if (!destination || destination.droppableId === source.droppableId) return
+    if (!destination || destination.droppableId === source.droppableId) {
+      flushMissedUpdate()
+      return
+    }
     const newStatus = destination.droppableId
     setTasks(prev => prev.map(t => t.id === draggableId ? { ...t, status: newStatus } : t))
     await supabase.from('tasks').update({ status: newStatus }).eq('id', draggableId)
+    flushMissedUpdate()
   }
 
   async function handleCreate(taskData) {
@@ -165,7 +196,7 @@ export default function Tasks() {
           <div className="spinner" style={{ width: 32, height: 32 }} />
         </div>
       ) : (
-        <DragDropContext onDragEnd={handleDragEnd}>
+        <DragDropContext onDragStart={() => { isDragging.current = true }} onDragEnd={handleDragEnd}>
           <div className="kanban-board" style={{ gridTemplateColumns: `repeat(${COLUMNS.length}, minmax(240px, 1fr))` }}>
             {COLUMNS.map(col => {
               const colTasks = byStatus(col.id)
