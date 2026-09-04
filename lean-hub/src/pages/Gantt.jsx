@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
-import { format, parseISO, differenceInDays, addDays, getDay } from 'date-fns'
-import { Download } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { format, parseISO, differenceInDays, addDays, getDay, isValid } from 'date-fns'
+import { Download, AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import TaskModal from '../components/TaskModal'
@@ -21,10 +21,23 @@ const HNDL_W  = 8
 const MS_DAY  = 86_400_000
 const DOW     = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
+// A charted date must parse AND land within this many years of today. Postgres
+// `date` columns and <input type="date"> both accept years far outside the range
+// JavaScript's Date can represent (a mistyped year such as 20260-07-01 saves
+// fine), and a single one of those turns `origin` into an Invalid Date, which
+// makes every format() call on this page throw RangeError.
+const MAX_YEARS_FROM_TODAY = 5
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function toX(date, origin) {
   return differenceInDays(date, origin) * DAY_W
+}
+
+function parseTaskDate(value) {
+  if (typeof value !== 'string') return null
+  const d = parseISO(value)
+  return isValid(d) ? d : null
 }
 
 function darken(hex) {
@@ -83,24 +96,40 @@ export default function GanttPage() {
 
   const loading = tasksLoading || phasesLoading
 
+  // Split off tasks whose dates can't be charted so one bad row can't break the page
+  const { datedTasks, skippedTasks } = useMemo(() => {
+    const now = new Date()
+    const minYear = now.getFullYear() - MAX_YEARS_FROM_TODAY
+    const maxYear = now.getFullYear() + MAX_YEARS_FROM_TODAY
+    const inRange = d => d.getFullYear() >= minYear && d.getFullYear() <= maxYear
+    const ok = [], bad = []
+    for (const t of tasks) {
+      const s = parseTaskDate(t.start_date)
+      const e = parseTaskDate(t.end_date)
+      if (s && e && inRange(s) && inRange(e)) ok.push(t)
+      else bad.push(t)
+    }
+    return { datedTasks: ok, skippedTasks: bad }
+  }, [tasks])
+
   // On first render with data, jump the timeline so today sits near the left edge
   useEffect(() => {
-    if (loading || didAutoScroll.current || tasks.length === 0) return
+    if (loading || didAutoScroll.current || datedTasks.length === 0) return
     const el = timelineRef.current
     if (!el) return
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const rawMin = new Date(Math.min(...tasks.map(t => parseISO(t.start_date).getTime())))
+    const rawMin = new Date(Math.min(...datedTasks.map(t => parseISO(t.start_date).getTime())))
     const origin = addDays(rawMin, -3)
     const todayX = differenceInDays(today, origin) * DAY_W
     el.scrollLeft = Math.max(0, todayX - Math.floor(el.clientWidth / 4))
     didAutoScroll.current = true
-  }, [loading, tasks])
+  }, [loading, datedTasks])
 
   // Mouse wheel pans the timeline horizontally (Shift+wheel scrolls rows).
   // Native listener because React registers wheel as passive, blocking preventDefault.
   useEffect(() => {
     const el = timelineRef.current
-    if (!el || loading || tasks.length === 0) return
+    if (!el || loading || datedTasks.length === 0) return
     function onWheel(e) {
       if (e.ctrlKey) return // let browser zoom through
       const mult = e.deltaMode === 1 ? 40 : 1
@@ -113,7 +142,7 @@ export default function GanttPage() {
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [loading, tasks.length])
+  }, [loading, datedTasks.length])
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
@@ -192,7 +221,7 @@ export default function GanttPage() {
         return
       }
 
-      if (d.ghostStart && d.ghostEnd) {
+      if (isValid(d.ghostStart) && isValid(d.ghostEnd)) {
         await supabase.from('tasks').update({
           start_date: format(d.ghostStart, 'yyyy-MM-dd'),
           end_date:   format(d.ghostEnd,   'yyyy-MM-dd'),
@@ -468,7 +497,7 @@ export default function GanttPage() {
 
   // ── Layout computations ──────────────────────────────────────────────────────
 
-  const visibleRows = [...tasks]
+  const visibleRows = [...datedTasks]
     .sort((a, b) => {
       const d = a.start_date.localeCompare(b.start_date)
       if (d !== 0) return d
@@ -476,14 +505,14 @@ export default function GanttPage() {
     })
     .map(task => ({ id: task.id, task }))
 
-  const hasTasks = tasks.length > 0
+  const hasTasks = datedTasks.length > 0
   const today = new Date(); today.setHours(0, 0, 0, 0)
 
   const rawMin = hasTasks
-    ? new Date(Math.min(...tasks.map(t => parseISO(t.start_date).getTime())))
+    ? new Date(Math.min(...datedTasks.map(t => parseISO(t.start_date).getTime())))
     : new Date(today.getFullYear(), today.getMonth(), 1)
   const rawMax = hasTasks
-    ? new Date(Math.max(...tasks.map(t => parseISO(t.end_date).getTime())))
+    ? new Date(Math.max(...datedTasks.map(t => parseISO(t.end_date).getTime())))
     : new Date(today.getFullYear(), today.getMonth() + 1, 0)
 
   const origin    = addDays(rawMin, -3)
@@ -530,7 +559,7 @@ export default function GanttPage() {
         <div>
           <h1 className="page-title">Gantt Chart</h1>
           <p className="page-subtitle">
-            {tasks.length} task{tasks.length !== 1 ? 's' : ''} · drag bars to move or resize · scroll to pan, Shift+scroll for rows
+            {datedTasks.length} task{datedTasks.length !== 1 ? 's' : ''} · drag bars to move or resize · scroll to pan, Shift+scroll for rows
           </p>
         </div>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -550,9 +579,30 @@ export default function GanttPage() {
         </div>
       </div>
 
-      {tasks.length === 0 ? (
+      {skippedTasks.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 9,
+          padding: '10px 14px', marginBottom: 16,
+          background: 'rgba(210,153,34,0.09)',
+          border: '1px solid rgba(210,153,34,0.3)',
+          borderRadius: 'var(--radius-md)',
+          color: '#D9A73F', fontSize: 13,
+        }}>
+          <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>
+            {skippedTasks.length} task{skippedTasks.length !== 1 ? 's' : ''} not charted — the start or due date is unreadable or more than {MAX_YEARS_FROM_TODAY} years from today:{' '}
+            <strong style={{ fontWeight: 600 }}>
+              {skippedTasks.slice(0, 3).map(t => t.title).join(', ')}
+              {skippedTasks.length > 3 ? ` and ${skippedTasks.length - 3} more` : ''}
+            </strong>
+            . Fix the dates on the Tasks board to include {skippedTasks.length !== 1 ? 'them' : 'it'} here.
+          </span>
+        </div>
+      )}
+
+      {datedTasks.length === 0 ? (
         <div className="empty-state">
-          <p style={{ fontSize: 15, fontWeight: 500 }}>No tasks with start & end dates</p>
+          <p style={{ fontSize: 15, fontWeight: 500 }}>No tasks with start &amp; end dates</p>
           <p style={{ fontSize: 13 }}>Add dates to tasks on the Kanban board to see them here</p>
         </div>
       ) : (
