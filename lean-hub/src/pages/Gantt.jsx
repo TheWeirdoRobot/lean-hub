@@ -46,7 +46,7 @@ function isWeekend(date) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function GanttPage() {
-  const { user } = useAuth()
+  const { user, canEdit } = useAuth()
   const { phases, phaseColorMap, loading: phasesLoading } = useCustomPhases()
 
   const [tasks, setTasks]           = useState([])
@@ -78,8 +78,8 @@ export default function GanttPage() {
   const panelW = showDates ? LW : LW_COMPACT
   const nameW  = showDates ? LW_NAME : LW_COMPACT
 
+  // Runs for signed-out visitors too — the chart is public and read-only
   useEffect(() => {
-    if (!user) return
     loadAll()
   }, [user])
 
@@ -171,6 +171,13 @@ export default function GanttPage() {
     e.preventDefault()
     e.stopPropagation()
     setTooltip(null)
+
+    // Signed-out visitors can open a bar to read it, but not move it
+    if (!canEdit) {
+      const raw = allTasksRef.current.find(t => t.id === task.id)
+      if (raw) setSelectedTask(raw)
+      return
+    }
 
     dragging.current = {
       task, type,
@@ -558,7 +565,9 @@ export default function GanttPage() {
         <div>
           <h1 className="page-title">Gantt Chart</h1>
           <p className="page-subtitle">
-            {datedTasks.length} task{datedTasks.length !== 1 ? 's' : ''} · drag bars to move or resize · scroll to pan, Shift+scroll for rows
+            {datedTasks.length} task{datedTasks.length !== 1 ? 's' : ''}
+            {canEdit ? ' · drag bars to move or resize' : ' · read-only'}
+            {' · scroll to pan, Shift+scroll for rows'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>

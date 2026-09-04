@@ -1,4 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 
@@ -13,7 +14,17 @@ const pageTitles = {
 
 export default function Layout() {
   const { pathname } = useLocation()
+  const { loading } = useAuth()
   const title = pageTitles[pathname] || 'LEAN Hub'
+
+  // Avoid flashing the signed-out view while the session is still resolving
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)' }}>
+        <div className="spinner" style={{ width: 32, height: 32 }} />
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>

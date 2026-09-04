@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Send, Paperclip, Trash2, AlertCircle, Check } from 'lucide-react'
+import { X, Send, Paperclip, Trash2, AlertCircle, Check, Eye } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Avatar from './Avatar'
@@ -21,7 +21,7 @@ const PRIORITIES = [
 
 
 export default function TaskModal({ task, profiles, onClose, onSave, onCreate, onDelete }) {
-  const { user, profile } = useAuth()
+  const { user, profile, canEdit } = useAuth()
   const { phases } = useCustomPhases()
   const { statuses } = useCustomStatuses()
   const isNew = !task?.id
@@ -51,7 +51,7 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
   const fileRef = useRef(null)
 
   useEffect(() => {
-    if (!task?.id) return
+    if (!task?.id || !canEdit) return
     fetchComments()
     fetchFiles()
 
@@ -203,6 +203,14 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
         </div>
 
         <div className="modal-body">
+          {!canEdit && (
+            <p className="readonly-badge" style={{ marginBottom: 18 }}>
+              <Eye size={12} /> Read-only — sign in to edit
+            </p>
+          )}
+
+          {/* A disabled fieldset switches off every control it contains */}
+          <fieldset disabled={!canEdit} style={{ border: 'none', padding: 0, margin: 0, minWidth: 0 }}>
           {/* Title */}
           <div className="form-group">
             <label htmlFor="task-title">Title *</label>
@@ -307,6 +315,7 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
               <input id="task-end" type="date" className="input" value={form.end_date} onChange={set('end_date')} />
             </div>
           </div>
+          </fieldset>
 
           {/* Errors */}
           {saveError && (
@@ -321,6 +330,11 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
           )}
 
           {/* Save / Delete row */}
+          {!canEdit ? (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={onClose}>Close</button>
+            </div>
+          ) : (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
             <div>
               {!isNew && onDelete && (
@@ -364,9 +378,10 @@ export default function TaskModal({ task, profiles, onClose, onSave, onCreate, o
               </button>
             </div>
           </div>
+          )}
 
-          {/* Files & Comments — existing tasks only */}
-          {!isNew && (
+          {/* Files & Comments — signed-in team members only */}
+          {!isNew && canEdit && (
             <>
               <div className="divider" style={{ margin: '24px 0' }} />
 

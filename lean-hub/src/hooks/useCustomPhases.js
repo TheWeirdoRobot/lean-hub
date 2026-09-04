@@ -31,7 +31,7 @@ export function useCustomPhases() {
           .from('custom_phases')
           .select('*')
           .order('created_at', { ascending: true })
-        setPhases(seeded || DEFAULT_PHASES)
+        setPhases(seeded?.length ? seeded : DEFAULT_PHASES)
       } else {
         setPhases(data)
       }

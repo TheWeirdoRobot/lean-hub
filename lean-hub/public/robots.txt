@@ -1,0 +1,3 @@
+# The board is readable without signing in, but it is not meant to be indexed.
+User-agent: *
+Disallow: /

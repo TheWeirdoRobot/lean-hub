@@ -49,7 +49,9 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut }}>
+    // Signed-out visitors get a read-only view of the board (see
+    // migration-public-read-only.sql); every edit control checks canEdit.
+    <AuthContext.Provider value={{ user, profile, loading, canEdit: !!user, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   )

@@ -2,13 +2,15 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, CheckSquare, BarChart2, Users, FolderOpen, Settings } from 'lucide-react'
 import WheelchairLogo from './WheelchairLogo'
+import { useAuth } from '../contexts/AuthContext'
 
 const links = [
   { to: '/',      icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/tasks', icon: CheckSquare,     label: 'Tasks' },
   { to: '/gantt', icon: BarChart2,       label: 'Gantt Chart' },
   { to: '/team',  icon: Users,           label: 'Team' },
-  { to: '/files', icon: FolderOpen,      label: 'Files' },
+  // Files is omitted for signed-out visitors: anon cannot read that table
+  { to: '/files', icon: FolderOpen,      label: 'Files', requiresAuth: true },
 ]
 
 function NavItem({ to, icon: Icon, label, end }) {
@@ -27,6 +29,7 @@ function NavItem({ to, icon: Icon, label, end }) {
 
 export default function Sidebar() {
   const [imgError, setImgError] = useState(false)
+  const { canEdit } = useAuth()
 
   return (
     <aside className="sidebar">
@@ -57,14 +60,16 @@ export default function Sidebar() {
 
       <nav className="sidebar-nav">
         <div className="nav-section-label">Workspace</div>
-        {links.map(({ to, icon, label }) => (
+        {links.filter(l => canEdit || !l.requiresAuth).map(({ to, icon, label }) => (
           <NavItem key={to} to={to} icon={icon} label={label} end={to === '/'} />
         ))}
 
         <div style={{ flex: 1 }} />
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 8 }}>
-          <NavItem to="/admin" icon={Settings} label="Admin" />
-        </div>
+        {canEdit && (
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 8 }}>
+            <NavItem to="/admin" icon={Settings} label="Admin" />
+          </div>
+        )}
       </nav>
 
       <div className="sidebar-footer">

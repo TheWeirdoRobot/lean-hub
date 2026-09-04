@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { LogOut, ChevronDown } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { LogOut, ChevronDown, Eye } from 'lucide-react'
 import { format } from 'date-fns'
 import { useAuth } from '../contexts/AuthContext'
 import Avatar from './Avatar'
 
 export default function TopBar({ title }) {
-  const { profile, signOut } = useAuth()
+  const { profile, signOut, canEdit } = useAuth()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -31,6 +32,14 @@ export default function TopBar({ title }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <span className="topbar-date">{format(new Date(), 'EEE, MMM d')}</span>
 
+        {!canEdit ? (
+          <>
+            <span className="readonly-badge" title="You are viewing the board without signing in">
+              <Eye size={12} /> Read-only
+            </span>
+            <Link to="/login" className="btn btn-secondary btn-sm">Sign in to edit</Link>
+          </>
+        ) : (
         <div ref={ref} style={{ position: 'relative' }}>
           <button
             className="user-chip"
@@ -60,6 +69,7 @@ export default function TopBar({ title }) {
             </div>
           )}
         </div>
+        )}
       </div>
     </header>
   )

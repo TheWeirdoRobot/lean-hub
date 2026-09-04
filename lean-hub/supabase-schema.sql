@@ -265,3 +265,22 @@ UPDATE tasks
    AND (assignee_ids IS NULL OR assignee_ids = '{}');
 
 CREATE INDEX IF NOT EXISTS tasks_assignee_ids_idx ON tasks USING gin (assignee_ids);
+
+
+-- ─────────────────────────────────────────
+-- FEATURE: PUBLIC READ-ONLY ACCESS
+-- Also available standalone in migration-public-read-only.sql.
+-- Grants the anon role SELECT on tasks/profiles/phases/statuses only.
+-- comments and files stay authenticated-only. No anon write policies exist.
+-- ─────────────────────────────────────────
+drop policy if exists "Anyone can view tasks" on tasks;
+create policy "Anyone can view tasks" on tasks for select to anon using (true);
+
+drop policy if exists "Anyone can view profiles" on profiles;
+create policy "Anyone can view profiles" on profiles for select to anon using (true);
+
+drop policy if exists "Anyone can view phases" on custom_phases;
+create policy "Anyone can view phases" on custom_phases for select to anon using (true);
+
+drop policy if exists "Anyone can view statuses" on custom_statuses;
+create policy "Anyone can view statuses" on custom_statuses for select to anon using (true);

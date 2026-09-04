@@ -18,20 +18,15 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
+          {/* The shell is public and read-only; editing is gated per control.
+              Files and Admin still need a session — anon cannot read those tables. */}
+          <Route path="/" element={<Layout />}>
             <Route index element={<Dashboard />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="gantt" element={<Gantt />} />
             <Route path="team" element={<Team />} />
-            <Route path="files" element={<Files />} />
-            <Route path="admin" element={<Admin />} />
+            <Route path="files" element={<ProtectedRoute><Files /></ProtectedRoute>} />
+            <Route path="admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -36,7 +36,7 @@ function dueLabel(task) {
 }
 
 export default function Dashboard() {
-  const { user, profile } = useAuth()
+  const { user, profile, canEdit } = useAuth()
   const navigate = useNavigate()
   const { phases, phaseColorMap } = useCustomPhases()
 
@@ -152,12 +152,16 @@ export default function Dashboard() {
     <div className="fade-in" style={{ maxWidth: 1200, margin: '0 auto' }}>
       <div className="page-header">
         <div>
-          <h1 className="page-title">{greeting()}{firstName ? `, ${firstName}` : ''}</h1>
+          <h1 className="page-title">
+            {canEdit ? `${greeting()}${firstName ? `, ${firstName}` : ''}` : 'Project Overview'}
+          </h1>
           <p className="page-subtitle">{subtitleParts.join(' · ')}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowNewTask(true)}>
-          <Plus size={15} /> New Task
-        </button>
+        {canEdit && (
+          <button className="btn btn-primary" onClick={() => setShowNewTask(true)}>
+            <Plus size={15} /> New Task
+          </button>
+        )}
       </div>
 
       {/* Team-wide counters */}
@@ -179,7 +183,8 @@ export default function Dashboard() {
         {/* ── Main column ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
 
-          {/* My tasks */}
+          {/* My tasks — only meaningful for a signed-in member */}
+          {canEdit && (
           <div className="card" style={{ padding: 0 }}>
             <div className="panel-head">
               <h2 className="panel-title">
@@ -242,6 +247,7 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+          )}
 
           {/* Upcoming timeline */}
           <div className="card">

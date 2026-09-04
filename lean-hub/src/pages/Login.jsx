@@ -130,6 +130,13 @@ export default function Login() {
             </Link>
           </p>
         </div>
+
+        <p style={{ textAlign: 'center', marginTop: 18, fontSize: 13 }}>
+          <Link to="/" style={{ color: 'var(--text-secondary)' }}>
+            Just looking? Browse the board read-only &rarr;
+          </Link>
+        </p>
+
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { Plus, Calendar, GripVertical, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import AvatarStack from '../components/AvatarStack'
 import TaskModal from '../components/TaskModal'
 import { format, isPast, parseISO } from 'date-fns'
@@ -14,6 +15,7 @@ import { assigneesOf, isAssignedTo } from '../lib/taskPeople'
 const TASK_SELECT = '*, creator:profiles!tasks_created_by_fkey(id, full_name)'
 
 export default function Tasks() {
+  const { canEdit } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -161,7 +163,10 @@ export default function Tasks() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Tasks</h1>
-          <p className="page-subtitle">{tasks.length} total task{tasks.length !== 1 ? 's' : ''} across all phases</p>
+          <p className="page-subtitle">
+            {tasks.length} total task{tasks.length !== 1 ? 's' : ''} across all phases
+            {!canEdit && ' · read-only'}
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <select className="select" value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)} style={{ width: 'auto', minWidth: 130 }}>
@@ -179,9 +184,11 @@ export default function Tasks() {
             <option value="">All Sub-teams</option>
             {SUB_TEAMS.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
           </select>
-          <button className="btn btn-primary" onClick={() => { setEditingTask(null); setShowModal(true) }}>
-            <Plus size={15} /> New Task
-          </button>
+          {canEdit && (
+            <button className="btn btn-primary" onClick={() => { setEditingTask(null); setShowModal(true) }}>
+              <Plus size={15} /> New Task
+            </button>
+          )}
         </div>
       </div>
 
@@ -215,7 +222,7 @@ export default function Tasks() {
                           </div>
                         )}
                         {colTasks.map((task, index) => (
-                          <Draggable key={task.id} draggableId={task.id} index={index}>
+                          <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={!canEdit}>
                             {(prov, snap) => (
                               <TaskCard
                                 task={task}
@@ -225,6 +232,7 @@ export default function Tasks() {
                                 onDelete={handleDelete}
                                 phaseColorMap={phaseColorMap}
                                 profiles={profiles}
+                                canEdit={canEdit}
                               />
                             )}
                           </Draggable>
@@ -254,7 +262,7 @@ export default function Tasks() {
   )
 }
 
-function TaskCard({ task, provided, isDragging, onClick, onDelete, phaseColorMap, profiles }) {
+function TaskCard({ task, provided, isDragging, onClick, onDelete, phaseColorMap, profiles, canEdit }) {
   const [deleteError, setDeleteError] = useState('')
   const isOverdue = task.end_date && task.status !== 'done' && isPast(parseISO(task.end_date))
 
@@ -279,7 +287,7 @@ function TaskCard({ task, provided, isDragging, onClick, onDelete, phaseColorMap
         ...provided.draggableProps.style,
       }}
     >
-      <button
+      {canEdit && <button
         className="task-delete"
         aria-label={`Delete ${task.title}`}
         onClick={async e => {
@@ -295,7 +303,7 @@ function TaskCard({ task, provided, isDragging, onClick, onDelete, phaseColorMap
         }}
       >
         <X size={11} />
-      </button>
+      </button>}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ marginTop: 2, color: 'var(--text-muted)', opacity: 0.5 }}>
           <GripVertical size={13} />
