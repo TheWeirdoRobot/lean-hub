@@ -7,6 +7,7 @@ import TaskModal from '../components/TaskModal'
 import { useCustomPhases } from '../hooks/useCustomPhases'
 import { parseTaskDate, isDateInRange, MAX_YEARS_FROM_TODAY } from '../lib/dates'
 import { subTeamAbbr, subTeamColor } from '../lib/teams'
+import { loadProfiles } from '../lib/profiles'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -249,8 +250,7 @@ export default function GanttPage() {
   }
 
   async function fetchProfiles() {
-    const { data } = await supabase.from('profiles').select('*')
-    setProfiles(data || [])
+    setProfiles(await loadProfiles())
   }
 
   async function fetchTasks() {

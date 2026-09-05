@@ -11,6 +11,7 @@ import { useCustomPhases } from '../hooks/useCustomPhases'
 import { useCustomStatuses, statusToValue } from '../hooks/useCustomStatuses'
 import { SUB_TEAMS, subTeamOf, DEFAULT_SUB_TEAM } from '../lib/teams'
 import { assigneesOf, isAssignedTo } from '../lib/taskPeople'
+import { loadProfiles } from '../lib/profiles'
 
 const TASK_SELECT = '*, creator:profiles!tasks_created_by_fkey(id, full_name)'
 
@@ -87,8 +88,7 @@ export default function Tasks() {
   }
 
   async function fetchProfiles() {
-    const { data } = await supabase.from('profiles').select('*')
-    setProfiles(data || [])
+    setProfiles(await loadProfiles())
   }
 
   function flushMissedUpdate() {

@@ -9,7 +9,8 @@ import TaskModal from '../components/TaskModal'
 import TimelinePreview from '../components/TimelinePreview'
 import { formatDistanceToNow, format, isPast, isToday, parseISO } from 'date-fns'
 import { useCustomPhases } from '../hooks/useCustomPhases'
-import { assigneesOf, isAssignedTo, subTeamsForUser, isGroupTaskFor } from '../lib/taskPeople'
+import { assigneesOf, isAssignedTo, isGroupTaskFor } from '../lib/taskPeople'
+import { loadProfiles } from '../lib/profiles'
 
 const TASK_SELECT = '*, creator:profiles!tasks_created_by_fkey(id, full_name)'
 
@@ -72,8 +73,7 @@ export default function Dashboard() {
   }
 
   async function fetchProfiles() {
-    const { data } = await supabase.from('profiles').select('*')
-    setProfiles(data || [])
+    setProfiles(await loadProfiles())
   }
 
   async function fetchActivity() {
@@ -124,9 +124,8 @@ export default function Dashboard() {
   // ── Mine ──
   // Work assigned to a group counts as mine too, otherwise unassigned Full Team
   // tasks belong to nobody on this list.
-  const myGroups = subTeamsForUser(user?.id, tasks)
   const myTasks = tasks
-    .filter(t => t.status !== 'done' && (isAssignedTo(t, user?.id) || isGroupTaskFor(t, myGroups)))
+    .filter(t => t.status !== 'done' && (isAssignedTo(t, user?.id) || isGroupTaskFor(t, profile?.sub_team)))
     .sort((a, b) => {
       if (!a.end_date && !b.end_date) return 0
       if (!a.end_date) return 1

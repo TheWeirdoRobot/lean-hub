@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { loadOwnProfile } from '../lib/profiles'
 
 const AuthContext = createContext(null)
 
@@ -25,8 +26,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   async function fetchProfile(userId) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
-    setProfile(data)
+    setProfile(await loadOwnProfile(userId))
     setLoading(false)
   }
 
