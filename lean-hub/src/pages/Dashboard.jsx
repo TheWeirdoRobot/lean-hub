@@ -9,7 +9,7 @@ import TaskModal from '../components/TaskModal'
 import TimelinePreview from '../components/TimelinePreview'
 import { formatDistanceToNow, format, isPast, isToday, parseISO } from 'date-fns'
 import { useCustomPhases } from '../hooks/useCustomPhases'
-import { assigneesOf, isAssignedTo } from '../lib/taskPeople'
+import { assigneesOf, isAssignedTo, subTeamsForUser, isGroupTaskFor } from '../lib/taskPeople'
 
 const TASK_SELECT = '*, creator:profiles!tasks_created_by_fkey(id, full_name)'
 
@@ -122,8 +122,11 @@ export default function Dashboard() {
   ]
 
   // ── Mine ──
+  // Work assigned to a group counts as mine too, otherwise unassigned Full Team
+  // tasks belong to nobody on this list.
+  const myGroups = subTeamsForUser(user?.id, tasks)
   const myTasks = tasks
-    .filter(t => isAssignedTo(t, user?.id) && t.status !== 'done')
+    .filter(t => t.status !== 'done' && (isAssignedTo(t, user?.id) || isGroupTaskFor(t, myGroups)))
     .sort((a, b) => {
       if (!a.end_date && !b.end_date) return 0
       if (!a.end_date) return 1
@@ -218,6 +221,7 @@ export default function Dashboard() {
               <div>
                 {myTasks.slice(0, 6).map(task => {
                   const due = dueLabel(task)
+                  const isGroup = !isAssignedTo(task, user?.id)
                   return (
                     <button key={task.id} className="activity-row" onClick={() => openTask(task)}>
                       <div style={{
@@ -229,7 +233,9 @@ export default function Dashboard() {
                           {task.title}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                          {task.phase}{task.sub_team ? ` · ${task.sub_team}` : ''}
+                          {task.phase}
+                          {task.sub_team ? ` · ${task.sub_team}` : ''}
+                          {isGroup && ' · unassigned group task'}
                         </div>
                       </div>
                       {due && (

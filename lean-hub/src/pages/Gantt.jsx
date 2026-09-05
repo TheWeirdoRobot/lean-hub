@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { format, parseISO, differenceInDays, addDays, getDay, isValid } from 'date-fns'
-import { Download, AlertTriangle, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Download, AlertTriangle, ChevronsLeft, ChevronsRight, ZoomIn, ZoomOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import TaskModal from '../components/TaskModal'
@@ -19,15 +19,17 @@ const HDR_H   = 72                       // 3 rows × 24px each
 const ROW1    = 24                       // month label row height
 const ROW2    = 24                       // day number row height
 const ROW3    = 24                       // day-of-week row height
-const DAY_W   = 36
+const DAY_W_DEFAULT = 36
+const DAY_W_MIN = 10
+const DAY_W_MAX = 72
 const HNDL_W  = 8
 const MS_DAY  = 86_400_000
 const DOW     = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function toX(date, origin) {
-  return differenceInDays(date, origin) * DAY_W
+function toX(date, origin, dayW) {
+  return differenceInDays(date, origin) * dayW
 }
 
 function darken(hex) {
@@ -59,6 +61,13 @@ export default function GanttPage() {
   const [showDates, setShowDates]   = useState(() => {
     try { return localStorage.getItem('gantt-show-dates') === 'true' } catch { return false }
   })
+  const [dayW, setDayW] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem('gantt-day-width'))
+      if (saved >= DAY_W_MIN && saved <= DAY_W_MAX) return saved
+    } catch { /* private mode */ }
+    return DAY_W_DEFAULT
+  })
 
   const headerRef   = useRef(null)
   const leftRef     = useRef(null)
@@ -67,12 +76,43 @@ export default function GanttPage() {
   const activeHandlers = useRef({ move: null, up: null })
   const allTasksRef = useRef([])
   const didAutoScroll = useRef(false)
+  const pendingScrollLeft = useRef(null)
 
   useEffect(() => { allTasksRef.current = tasks }, [tasks])
 
   useEffect(() => {
     try { localStorage.setItem('gantt-show-dates', String(showDates)) } catch { /* private mode */ }
   }, [showDates])
+
+  useEffect(() => {
+    try { localStorage.setItem('gantt-day-width', String(dayW)) } catch { /* private mode */ }
+  }, [dayW])
+
+  // Zooming re-lays out the timeline, so the scroll offset that keeps the anchor
+  // day under the pointer can only be applied once the new width is painted.
+  useLayoutEffect(() => {
+    const el = timelineRef.current
+    if (!el || pendingScrollLeft.current == null) return
+    el.scrollLeft = Math.max(0, pendingScrollLeft.current)
+    pendingScrollLeft.current = null
+    if (headerRef.current) headerRef.current.scrollLeft = el.scrollLeft
+  }, [dayW])
+
+  function zoomBy(factor) {
+    const el = timelineRef.current
+    setDayW(prev => {
+      const next = Math.round(Math.min(DAY_W_MAX, Math.max(DAY_W_MIN, prev * factor)))
+      if (next !== prev && el) {
+        // Hold the middle of the view steady
+        const centre = el.scrollLeft + el.clientWidth / 2
+        pendingScrollLeft.current = (centre / prev) * next - el.clientWidth / 2
+      }
+      return next
+    })
+  }
+
+  // Day numbers collide once the columns get narrow, so drop them when zoomed out
+  const showDayLabels = dayW >= 20
 
   // Collapsing the From/To columns hands ~230px back to the timeline
   const panelW = showDates ? LW : LW_COMPACT
@@ -119,28 +159,85 @@ export default function GanttPage() {
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const rawMin = new Date(Math.min(...datedTasks.map(t => parseISO(t.start_date).getTime())))
     const origin = addDays(rawMin, -3)
-    const todayX = differenceInDays(today, origin) * DAY_W
+    const todayX = differenceInDays(today, origin) * dayW
     el.scrollLeft = Math.max(0, todayX - Math.floor(el.clientWidth / 4))
     didAutoScroll.current = true
-  }, [loading, datedTasks])
+  }, [loading, datedTasks, dayW])
 
-  // Mouse wheel pans the timeline horizontally (Shift+wheel scrolls rows).
-  // Native listener because React registers wheel as passive, blocking preventDefault.
+  // Plain wheel scrolls rows and Shift+wheel scrolls sideways, both left to the
+  // browser. Only Ctrl/Cmd+wheel is intercepted, to zoom the day columns around
+  // the pointer. Native listener because React registers wheel as passive.
   useEffect(() => {
     const el = timelineRef.current
     if (!el || loading || datedTasks.length === 0) return
+
     function onWheel(e) {
-      if (e.ctrlKey) return // let browser zoom through
-      const mult = e.deltaMode === 1 ? 40 : 1
-      if (e.shiftKey) {
-        el.scrollTop += e.deltaY * mult
-      } else {
-        el.scrollLeft += (e.deltaY + e.deltaX) * mult
-      }
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const cursorX = e.clientX - el.getBoundingClientRect().left
+      setDayW(prev => {
+        const next = Math.round(Math.min(DAY_W_MAX, Math.max(DAY_W_MIN, prev * (e.deltaY < 0 ? 1.15 : 1 / 1.15))))
+        if (next !== prev) {
+          const dayUnderCursor = (el.scrollLeft + cursorX) / prev
+          pendingScrollLeft.current = dayUnderCursor * next - cursorX
+        }
+        return next
+      })
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [loading, datedTasks.length])
+
+  // The task list has hidden overflow, so forward its wheel to the timeline
+  useEffect(() => {
+    const el = leftRef.current
+    if (!el || loading || datedTasks.length === 0) return
+    function onWheel(e) {
+      const tl = timelineRef.current
+      if (!tl || e.ctrlKey || e.metaKey) return
+      tl.scrollTop += e.deltaY
       e.preventDefault()
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
+  }, [loading, datedTasks.length])
+
+  // Middle-mouse drag pans in both directions
+  useEffect(() => {
+    const el = timelineRef.current
+    if (!el || loading || datedTasks.length === 0) return
+    let pan = null
+
+    function onDown(e) {
+      if (e.button !== 1) return
+      e.preventDefault() // suppress Chrome's autoscroll widget
+      pan = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
+      el.style.cursor = 'grabbing'
+    }
+    function onMove(e) {
+      if (!pan) return
+      el.scrollLeft = pan.left - (e.clientX - pan.x)
+      el.scrollTop  = pan.top  - (e.clientY - pan.y)
+    }
+    function onUp() {
+      if (!pan) return
+      pan = null
+      el.style.cursor = ''
+    }
+    function onAuxClick(e) { if (e.button === 1) e.preventDefault() }
+
+    el.addEventListener('mousedown', onDown)
+    el.addEventListener('auxclick', onAuxClick)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      el.removeEventListener('mousedown', onDown)
+      el.removeEventListener('auxclick', onAuxClick)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      el.style.cursor = ''
+    }
   }, [loading, datedTasks.length])
 
   // ── Data loading ────────────────────────────────────────────────────────────
@@ -168,6 +265,7 @@ export default function GanttPage() {
   // ── Drag / resize ───────────────────────────────────────────────────────────
 
   function onBarMouseDown(e, task, type) {
+    if (e.button !== 0) return // middle-drag pans the chart instead
     e.preventDefault()
     e.stopPropagation()
     setTooltip(null)
@@ -194,7 +292,7 @@ export default function GanttPage() {
       if (!d) return
       const dx = ev.clientX - d.startX
       if (Math.abs(dx) >= 3) d.hasMoved = true
-      const days = Math.round(dx / DAY_W)
+      const days = Math.round(dx / dayW)
       let s = d.origStart, en = d.origEnd
 
       if (type === 'move') {
@@ -354,20 +452,20 @@ export default function GanttPage() {
     // ── Header: day numbers + day-of-week ──
     ctx.textAlign = 'center'
     days.forEach((d, i) => {
-      const x = LW + i * DAY_W
+      const x = LW + i * dayW
       const weekend = isWeekend(d)
       const isToday = i === todayOffset
       if (weekend) {
         ctx.fillStyle = '#0B0B0E'
-        ctx.fillRect(x, TITLE_H + ROW1, DAY_W, ROW2 + ROW3)
+        ctx.fillRect(x, TITLE_H + ROW1, dayW, ROW2 + ROW3)
       }
       line(x, TITLE_H + ROW1, x, TITLE_H + HDR_H, '#202028')
       ctx.font = isToday ? `700 11px ${FONT}` : `400 11px ${FONT}`
       ctx.fillStyle = isToday ? '#F97316' : weekend ? '#4E4E58' : '#A2A2AE'
-      ctx.fillText(format(d, 'd'), x + DAY_W / 2, TITLE_H + ROW1 + ROW2 - 6)
+      if (showDayLabels) ctx.fillText(format(d, 'd'), x + dayW / 2, TITLE_H + ROW1 + ROW2 - 6)
       ctx.font = `400 9px ${FONT}`
       ctx.fillStyle = weekend ? '#3A3A42' : '#56565F'
-      ctx.fillText(DOW[getDay(d)], x + DAY_W / 2, TITLE_H + HDR_H - 6)
+      if (showDayLabels) ctx.fillText(DOW[getDay(d)], x + dayW / 2, TITLE_H + HDR_H - 6)
     })
     ctx.textAlign = 'left'
     line(LW, TITLE_H + ROW1 + ROW2, totalW, TITLE_H + ROW1 + ROW2, '#26262E')
@@ -379,13 +477,13 @@ export default function GanttPage() {
     days.forEach((d, i) => {
       if (!isWeekend(d)) return
       ctx.fillStyle = '#0B0B0E'
-      ctx.fillRect(LW + i * DAY_W, yB, DAY_W, bodyH)
+      ctx.fillRect(LW + i * dayW, yB, dayW, bodyH)
     })
     visibleRows.forEach((_, i) => {
       ctx.fillStyle = i % 2 === 0 ? 'rgba(23,23,28,0.55)' : 'rgba(18,18,23,0.55)'
       ctx.fillRect(LW, yB + i * ROW_H, svgW, ROW_H)
     })
-    days.forEach((_, i) => line(LW + i * DAY_W, yB, LW + i * DAY_W, yB + bodyH, '#1C1C22'))
+    days.forEach((_, i) => line(LW + i * dayW, yB, LW + i * dayW, yB + bodyH, '#1C1C22'))
     visibleRows.forEach((_, i) => line(LW, yB + (i + 1) * ROW_H, totalW, yB + (i + 1) * ROW_H, '#26262E'))
 
     // ── Body: left panel rows ──
@@ -434,9 +532,9 @@ export default function GanttPage() {
       const task  = row.task
       const ds    = parseISO(task.start_date)
       const de    = parseISO(task.end_date)
-      const bx    = LW + toX(ds, origin)
+      const bx    = LW + toX(ds, origin, dayW)
       const dur   = differenceInDays(de, ds) + 1
-      const bw    = Math.max(DAY_W, dur * DAY_W)
+      const bw    = Math.max(dayW, dur * dayW)
       const barY  = yB + i * ROW_H + 7
       const barH  = ROW_H - 14
       const color = phaseColorMap[task.phase] || '#70707C'
@@ -524,7 +622,7 @@ export default function GanttPage() {
   const origin    = addDays(rawMin, -3)
   const tlEnd     = addDays(rawMax, 3)
   const totalDays = differenceInDays(tlEnd, origin) + 1
-  const svgW      = totalDays * DAY_W
+  const svgW      = totalDays * dayW
   const svgH      = Math.max(visibleRows.length * ROW_H, 320)
 
   // Build day array
@@ -537,11 +635,11 @@ export default function GanttPage() {
     const mo = format(days[mi], 'yyyy-MM')
     const si = mi
     while (mi < days.length && format(days[mi], 'yyyy-MM') === mo) mi++
-    monthSpans.push({ label: format(days[si], 'MMM yyyy'), x: si * DAY_W, w: (mi - si) * DAY_W })
+    monthSpans.push({ label: format(days[si], 'MMM yyyy'), x: si * dayW, w: (mi - si) * dayW })
   }
 
   const todayOffset = differenceInDays(today, origin)
-  const todayX      = todayOffset * DAY_W
+  const todayX      = todayOffset * dayW
 
   function syncScroll(e) {
     if (headerRef.current)  headerRef.current.scrollLeft = e.target.scrollLeft
@@ -567,7 +665,7 @@ export default function GanttPage() {
           <p className="page-subtitle">
             {datedTasks.length} task{datedTasks.length !== 1 ? 's' : ''}
             {canEdit ? ' · drag bars to move or resize' : ' · read-only'}
-            {' · scroll to pan, Shift+scroll for rows'}
+            {' · Ctrl+scroll to zoom · middle-drag to pan'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -577,6 +675,28 @@ export default function GanttPage() {
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{phase.name}</span>
             </div>
           ))}
+          <div style={{ display: 'flex', gap: 2 }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => zoomBy(1 / 1.3)}
+              disabled={dayW <= DAY_W_MIN}
+              aria-label="Zoom out"
+              title="Zoom out (Ctrl+scroll)"
+              style={{ padding: '7px 9px' }}
+            >
+              <ZoomOut size={14} />
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => zoomBy(1.3)}
+              disabled={dayW >= DAY_W_MAX}
+              aria-label="Zoom in"
+              title="Zoom in (Ctrl+scroll)"
+              style={{ padding: '7px 9px' }}
+            >
+              <ZoomIn size={14} />
+            </button>
+          </div>
           <button
             className="btn btn-secondary"
             onClick={() => setShowDates(v => !v)}
@@ -665,21 +785,21 @@ export default function GanttPage() {
 
                 {/* Row 2 — Day numbers */}
                 {days.map((d, i) => {
-                  const x       = i * DAY_W
+                  const x       = i * dayW
                   const weekend = isWeekend(d)
                   const isToday = i === todayOffset
                   return (
                     <g key={`dn-${i}`}>
-                      {weekend && <rect x={x} y={ROW1} width={DAY_W} height={ROW2 + ROW3} fill="#0B0B0E" />}
+                      {weekend && <rect x={x} y={ROW1} width={dayW} height={ROW2 + ROW3} fill="#0B0B0E" />}
                       <line x1={x} x2={x} y1={ROW1} y2={ROW1 + ROW2} stroke="#202028" strokeWidth={1} />
-                      <text
-                        x={x + DAY_W / 2} y={ROW1 + ROW2 - 6}
+                      {showDayLabels && <text
+                        x={x + dayW / 2} y={ROW1 + ROW2 - 6}
                         fill={isToday ? '#F97316' : weekend ? '#4E4E58' : '#A2A2AE'}
                         fontSize={11} fontWeight={isToday ? 700 : 400}
                         fontFamily="Inter, sans-serif" textAnchor="middle"
                       >
                         {format(d, 'd')}
-                      </text>
+                      </text>}
                     </g>
                   )
                 })}
@@ -687,19 +807,19 @@ export default function GanttPage() {
 
                 {/* Row 3 — Day-of-week abbreviations */}
                 {days.map((d, i) => {
-                  const x       = i * DAY_W
+                  const x       = i * dayW
                   const dow     = getDay(d)
                   const weekend = dow === 0 || dow === 6
                   return (
                     <g key={`dow-${i}`}>
                       <line x1={x} x2={x} y1={ROW1 + ROW2} y2={HDR_H} stroke="#202028" strokeWidth={1} />
-                      <text
-                        x={x + DAY_W / 2} y={HDR_H - 6}
+                      {showDayLabels && <text
+                        x={x + dayW / 2} y={HDR_H - 6}
                         fill={weekend ? '#3A3A42' : '#56565F'}
                         fontSize={9} fontFamily="Inter, sans-serif" textAnchor="middle"
                       >
                         {DOW[dow]}
-                      </text>
+                      </text>}
                     </g>
                   )
                 })}
@@ -763,7 +883,7 @@ export default function GanttPage() {
                   if (!isWeekend(d)) return null
                   return (
                     <rect key={`wknd-${i}`}
-                      x={i * DAY_W} y={0} width={DAY_W} height={svgH}
+                      x={i * dayW} y={0} width={dayW} height={svgH}
                       fill="#0B0B0E"
                     />
                   )
@@ -781,7 +901,7 @@ export default function GanttPage() {
                 {/* Vertical day grid lines */}
                 {days.map((_, i) => (
                   <line key={`vl-${i}`}
-                    x1={i * DAY_W} x2={i * DAY_W} y1={0} y2={svgH}
+                    x1={i * dayW} x2={i * dayW} y1={0} y2={svgH}
                     stroke="#1C1C22" strokeWidth={1}
                   />
                 ))}
@@ -809,9 +929,9 @@ export default function GanttPage() {
                   const ghost = dragState?.taskId === task.id ? dragState : null
                   const ds    = ghost ? ghost.start : parseISO(task.start_date)
                   const de    = ghost ? ghost.end   : parseISO(task.end_date)
-                  const bx    = toX(ds, origin)
+                  const bx    = toX(ds, origin, dayW)
                   const dur   = differenceInDays(de, ds) + 1
-                  const bw    = Math.max(DAY_W, dur * DAY_W)
+                  const bw    = Math.max(dayW, dur * dayW)
                   const barY  = y + 7
                   const barH  = ROW_H - 14
                   const color = phaseColorMap[task.phase] || '#8A8A94'

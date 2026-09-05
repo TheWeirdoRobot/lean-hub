@@ -30,3 +30,27 @@ export function assigneeFields(ids) {
   const clean = [...new Set((ids || []).filter(Boolean))]
   return { assignee_ids: clean, assigned_to: clean[0] || null }
 }
+
+/**
+ * Sub-teams a person works in, inferred from the tasks they are individually
+ * assigned. profiles has no sub_team column, so this mirrors the heuristic the
+ * Team page already uses to group the roster.
+ */
+export function subTeamsForUser(userId, tasks) {
+  const groups = new Set()
+  if (!userId) return groups
+  for (const t of tasks) {
+    if (t.sub_team && isAssignedTo(t, userId)) groups.add(t.sub_team)
+  }
+  return groups
+}
+
+/**
+ * True for work handed to a group rather than a person: nobody is named on it,
+ * and it belongs either to the whole team or to a sub-team this person works in.
+ */
+export function isGroupTaskFor(task, groups) {
+  if (assigneeIds(task).length > 0) return false
+  const team = task?.sub_team || 'Full Team'
+  return team === 'Full Team' || groups.has(team)
+}
